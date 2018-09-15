@@ -5,8 +5,9 @@
 
 uint8_t _get_code() {
 	if (Serial.available()) {
-		Serial.read();
-		return CODE_READ_SERIAL;
+		if (Serial.read() == 0x10) {
+			return CODE_READ_SERIAL;
+		}
 	}
 
 	uint8_t radio_code = radio_available();
@@ -18,7 +19,7 @@ uint8_t _get_code() {
 
 void setup()
 {
-	Serial.begin(115200);
+	Serial.begin(921600);
 	radio_setup_server();
 }
 

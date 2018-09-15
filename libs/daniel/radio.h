@@ -3,7 +3,7 @@
 
 #include "RH_RF95.h"
 
-#define RADIO_MAX_PAYLOAD_LEN 150 // do not go higher than RH_RF95_MAX_MESSAGE_LEN - 1
+#define RADIO_MAX_PAYLOAD_LEN 127 // do not go higher than RH_RF95_MAX_MESSAGE_LEN - 1
 
 typedef struct radio_payload {
 	uint8_t type;
