@@ -127,6 +127,7 @@ void camera_setup() {
 	myCAM.InitCAM();
 
 	myCAM.OV2640_set_JPEG_size(OV2640_640x480);
+//	myCAM.OV2640_set_JPEG_size(OV2640_160x120);
 
 	delay(1000);
 	myCAM.clear_fifo_flag();

@@ -4,14 +4,15 @@
 #include "radio.h"
 #include "common.h"
 
-uint8_t _get_code() {
+byte _get_code() {
 	if (Serial.available()) {
-		if (Serial.read() == 0x10) {
+		int c = Serial.read();
+		if (c == 'f' || c == 0x10) {
 			return CODE_READ_SERIAL;
 		}
 	}
 
-	uint8_t radio_code = radio_available();
+	byte radio_code = radio_available();
 	if (radio_code) {
 		return radio_code;
 	}
@@ -27,17 +28,17 @@ void setup()
 
 void loop()
 {
-	uint8_t code = _get_code();
+	byte code = _get_code();
 
 	switch (code) {
 	case CODE_READ_SERIAL:
 	case CODE_CAPTURE_PHOTO:
 		radio_message_t *m = radio_get_message();
-		m->payload.type = CODE_PHOTO_DATA;
 
 		camera_capture_photo();
 
 		while ((m->len = camera_read_captured_data(m->payload.data, sizeof(m->payload.data))) > 0) {
+			m->payload.type = CODE_PHOTO_DATA;
 			m->len++; // for type
 			if (!radio_send()) {
 				Serial.println("data sent failure");
