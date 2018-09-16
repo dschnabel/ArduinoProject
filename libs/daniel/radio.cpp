@@ -6,7 +6,7 @@
 #define CLIENT_ADDRESS 212
 #define SERVER_ADDRESS 65
 
-RH_RF95 radio_driver;
+RH_RF95 radio_driver; // <-- pass in alt slaveSelectPin (default 10) and interruptPin (default 2)
 RHReliableDatagram radio_manager(radio_driver, 1);
 
 radio_message_t radio_message;
