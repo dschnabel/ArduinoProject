@@ -190,24 +190,15 @@ bool HologramSIMCOM::send(String data) {
     return sent;
 }
 
-bool HologramSIMCOM::send(const char* data) {
-    bool sent = send(String(data));
-    return sent;
-}
+bool HologramSIMCOM::send(uint8_t client, uint8_t messageNr, uint8_t packetNr, uint8_t type, const char* data) {
+	String message = "{\"c\":" + String(client) +
+			",\"m\":" + String(messageNr) +
+			",\"p\":" + String(packetNr) +
+			",\"t\":" + String(type) +
+			",\"d\":\"" + String(data) +
+			"\"}";
 
-bool HologramSIMCOM::send(String data, const String topics) {
-    // modify data for TCP transmittal
-    data.replace("\"","\\\"");
-    data = "{\"k\":\"" + String(_DEVICEKEY)
-           + "\",\"d\":\"" + data
-           + "\",\"t\":\"" + topics + "\"}\r\n";
-
-    bool sent = _sendMessage(data);
-    return sent;
-}
-
-bool HologramSIMCOM::send(const char* data, const char* topics) {
-    bool sent = send(String(data), String(topics));
+    bool sent = send(message);
     return sent;
 }
 

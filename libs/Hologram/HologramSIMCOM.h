@@ -33,10 +33,8 @@ public:
     int cellStrength(); // return cell reception strength [0-none,1-poor,2-good,3-great]
     void debug(); // enables manual serial and verbose monitoring
 
-    bool send(const char* data); // Send a char array to Hologram Cloud
     bool send(String data); // Send a String to Hologram Cloud
-    bool send(const char* data, const char* topics); // optionally send topics as char array
-    bool send(String data, const String topics); // optionally send topics as String
+    bool send(uint8_t client, uint8_t messageNr, uint8_t packetNr, uint8_t type, const char* data); // Send a char array to Hologram Cloud
 
     bool sendSMS(const char* phoneNum, const char* message); // Send Cloud SMS as char array
     bool sendSMS(const String phoneNum, String message); // Send Cloud SMS as Strings
