@@ -5,6 +5,8 @@
 #ifndef _BASE64_H
 #define _BASE64_H
 
+#include "Arduino.h"
+
 typedef struct {
 	int index;
 	unsigned char a3[3];
@@ -32,7 +34,7 @@ extern const char b64_alphabet[];
  * 			2. input must not be null
  * 			3. inputLen must be greater than or equal to 0
  */
-int base64_encode(encode_control *control, char *output, char *input, int inputLen);
+int base64_encode(encode_control *control, char *output, byte *input, int inputLen);
 int base64_encode_finalize(encode_control *control, char *output);
 
 /* base64_decode:
