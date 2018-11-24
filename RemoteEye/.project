@@ -42,9 +42,9 @@
 			<locationURI>ECLIPSE_HOME/arduinoPlugin/packages/arduino/hardware/avr/1.6.21/variants/eightanaloginputs</locationURI>
 		</link>
 		<link>
-			<name>libraries/Hologram</name>
+			<name>libraries/ArduCAM</name>
 			<type>2</type>
-			<location>E:/arduino/ArduinoProject/libs/Hologram</location>
+			<location>E:/arduino/ArduinoProject/libs/ArduCAM</location>
 		</link>
 		<link>
 			<name>libraries/SPI</name>
@@ -60,11 +60,6 @@
 			<name>libraries/Wire</name>
 			<type>2</type>
 			<locationURI>ECLIPSE_HOME/arduinoPlugin/packages/arduino/hardware/avr/1.6.21/libraries/Wire</locationURI>
-		</link>
-		<link>
-			<name>libraries/base64</name>
-			<type>2</type>
-			<location>E:/arduino/ArduinoProject/libs/base64</location>
 		</link>
 	</linkedResources>
 </projectDescription>

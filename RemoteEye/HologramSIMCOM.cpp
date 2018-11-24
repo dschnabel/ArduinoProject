@@ -15,17 +15,14 @@ PUBLIC
 bool HologramSIMCOM::begin() {
     bool initiated = false;
 
-    serialHologram.begin(115200);
-//    while(!serialHologram); // wait for Serial to be ready
-
-    Serial.println(F("Configuring to 9600 baud"));
-    serialHologram.println("AT+IPR=9600"); // Set baud rate
-    serialHologram.begin(9600);
-
-    int timeout = 5000;
+    _initSerial();
+    int timeout = 30000;
     while(_writeCommand("AT\r\n", 1, "OK", "ERROR") != 2 && timeout > 0) {
-    	delay(500);
-    	timeout -= 500;
+    	_stopSerial();
+    	delay(2000);
+    	_initSerial();
+
+    	timeout -= 2000;
     }
     if (timeout <= 0) {
         Serial.println(F("ERROR: begin() failed at AT"));
@@ -50,7 +47,12 @@ bool HologramSIMCOM::begin() {
             break;
         }
 
-        if(cellStrength() == 0) {
+        int timeout = 10000;
+        while (cellStrength() == 0 && timeout > 0) {
+        	delay(500);
+        	timeout -= 500;
+        }
+        if (timeout <= 0) {
             Serial.println(F("ERROR: no signal"));
             break;
         }
@@ -285,6 +287,18 @@ void HologramSIMCOM::_checkIfInbound() {
     }
 }
 
+void HologramSIMCOM::_initSerial() {
+    serialHologram.begin(115200);
+
+    Serial.println(F("Configuring to 9600 baud"));
+    serialHologram.println("AT+IPR=9600"); // Set baud rate
+    serialHologram.begin(9600);
+}
+
+void HologramSIMCOM::_stopSerial() {
+	serialHologram.end();
+}
+
 void HologramSIMCOM::_writeSerial(const char* string) {
     // Note: this expects you to check state before calling
     // IMPORTANT: I want to tightly control writing to serialHologram,
@@ -371,19 +385,19 @@ bool HologramSIMCOM::_connectNetwork() {
             break;
         }
 
-        int timeout = 10000;
+        int timeout = 30000;
         while (_writeCommand("AT+NETOPEN\r\n", 5, "OK", "ERROR") != 2 && timeout > 0) {
         	// Close socket
         	_writeCommand("AT+NETCLOSE\r\n", 5, "", "");
-        	delay(500);
-        	timeout -= 500;
+        	delay(1000);
+        	timeout -= 1000;
         }
         if (timeout <= 0) {
         	Serial.println(F("ERROR: failed at +NETOPEN (1)"));
         	break;
         }
 
-        timeout = 10000;
+        timeout = 30000;
         while (_writeCommand("AT+NETOPEN?\r\n", 5, "1", "0") != 2 && timeout > 0) {
         	delay(500);
         	timeout -= 500;

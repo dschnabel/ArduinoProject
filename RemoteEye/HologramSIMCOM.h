@@ -52,6 +52,8 @@ private:
     String _SERIALBUFFER = ""; // Where we store serial reads on line at a time (maybe make it a char array?)
 
     // General modem functions --------------------------------------------
+    void _initSerial();
+    void _stopSerial();
     void _writeSerial(const char* string); // send command to modem without waiting
     void _writeCommand(const char* command, const unsigned long timeout); // send command to modem and wait
     // Send command, wait response or timeout, return [0-timeout,1-error,2-success]
