@@ -182,40 +182,59 @@ int HologramSIMCOM::cellStrength() {
     }
 }
 
-bool HologramSIMCOM::send(String data) {
-    // modify data for TCP transmittal
-    data.replace("\"","\\\"");
-    data = "{\"k\":\""+ String(_DEVICEKEY)
-           + "\",\"d\":\"" + data + "\"}\r\n";
+unsigned int HologramSIMCOM::sendOpenConnection(uint8_t client, uint8_t messageNr, uint8_t packetNr, uint8_t type) {
+    // Start TCP connection
+    if(_writeCommand("AT+CIPOPEN=1,\"TCP\",\"23.253.146.203\",9999\r\n", 75, "+CIPOPEN: 1,0", "ERROR") != 2) {
+        Serial.println(F("ERROR: failed to start TCP connection"));
+        return -1;
+    }
 
-    bool sent = _sendMessage(data);
-    return sent;
+    if(_writeCommand("AT+CIPSEND=1,\r\n", 5, ">", "ERROR") != 2) {
+        Serial.println(F("ERROR: failed to initiaite CIPSEND"));
+        return -1;
+    }
+
+    _SENDBUFFER = 1500 - 8; // 8 = strlen(fin) + "\x1a", see sendSendOff()
+
+	String message = "{";
+	if (client > 0) message += "\"c\":" + String(client) + ",";
+	if (messageNr > 0) message += "\"m\":" + String(messageNr) + ",";
+	if (packetNr > 0) message += "\"p\":" + String(packetNr) + ",";
+	message += "\"t\":" + String(type) + ",\"d\":\"";
+
+	message.replace("\"","\\\"");
+	message = "{\"k\":\""+ String(_DEVICEKEY)
+           + "\",\"d\":\"" + message;
+
+	return sendAppendData(message);
 }
 
-bool HologramSIMCOM::send(uint8_t client, uint8_t messageNr, uint8_t packetNr, uint8_t type, const char* data) {
-	String message = "{\"c\":" + String(client) +
-			",\"m\":" + String(messageNr) +
-			",\"p\":" + String(packetNr) +
-			",\"t\":" + String(type) +
-			",\"d\":\"" + String(data) +
-			"\"}";
+unsigned int HologramSIMCOM::sendAppendData(const String data) {
+	if (data.length() > _SENDBUFFER) {
+		return -1;
+	}
+	_SENDBUFFER -= data.length();
 
-    bool sent = send(message);
-    return sent;
+	char dataChar[data.length()+1];
+	data.toCharArray(dataChar, data.length()+1);
+	_writeSerial(dataChar);
+
+	return _SENDBUFFER;
 }
 
-bool HologramSIMCOM::sendSMS(const String phoneNum, String message) {
-    // modify data for TCP transmittal
-    message = "S" + String(_DEVICEKEY)
-              + phoneNum + " " + message + "\r\n";
+bool HologramSIMCOM::sendSendOff() {
+	const char *fin = "\\\"}\"}\r\n";
+	_writeSerial(fin);
 
-    bool sent = _sendMessage(message);
-    return sent;
-}
+    if(_writeCommand("\x1a", 60, "OK", "ERROR") != 2) {
+        Serial.println(F("ERROR: failed to send data message"));
+        return false;
+    }
 
-bool HologramSIMCOM::sendSMS(const char* phoneNum, const char* message) {
-    bool sent = sendSMS(String(phoneNum), String(message));
-    return sent;
+    // wait for the connection to close before returning
+    _writeCommand("", 10, "+IPCLOSE:", "ERROR");
+
+    return true;
 }
 
 int HologramSIMCOM::availableMessage() {
@@ -385,22 +404,29 @@ bool HologramSIMCOM::_connectNetwork() {
             break;
         }
 
-        int timeout = 30000;
-        while (_writeCommand("AT+NETOPEN\r\n", 5, "OK", "ERROR") != 2 && timeout > 0) {
-        	// Close socket
-        	_writeCommand("AT+NETCLOSE\r\n", 5, "", "");
-        	delay(1000);
-        	timeout -= 1000;
-        }
-        if (timeout <= 0) {
-        	Serial.println(F("ERROR: failed at +NETOPEN (1)"));
-        	break;
-        }
-
-        timeout = 30000;
-        while (_writeCommand("AT+NETOPEN?\r\n", 5, "1", "0") != 2 && timeout > 0) {
-        	delay(500);
-        	timeout -= 500;
+        long timeout = 60000;
+        while (timeout > 0) {
+        	int timeout2 = 10000;
+            while (_writeCommand("AT+NETOPEN\r\n", 5, "+NETOPEN: 0", "+NETOPEN: 1") != 2 && timeout2 > 0) {
+            	// Close socket
+            	_writeCommand("AT+NETCLOSE\r\n", 5, "", "");
+            	delay(1000);
+            	timeout2 -= 1000;
+            	timeout -= 1000;
+            }
+            if (timeout2 <= 0) {
+            	Serial.println(F("ERROR: failed at +NETOPEN (1)"));
+            	break;
+            }
+            int timeout3 = 5000;
+            while (_writeCommand("AT+NETOPEN?\r\n", 5, "1", "0") != 2 && timeout3 > 0) {
+            	delay(500);
+            	timeout3 -= 500;
+            	timeout -= 500;
+            }
+            if (timeout3 > 0) {
+            	break;
+            }
         }
         if (timeout <= 0) {
         	Serial.println(F("ERROR: failed at +NETOPEN (2)"));
@@ -412,36 +438,6 @@ bool HologramSIMCOM::_connectNetwork() {
     }
 
     return connection;
-}
-
-bool HologramSIMCOM::_sendMessage(const String data) {
-    // Start TCP connection
-    if(_writeCommand("AT+CIPOPEN=1,\"TCP\",\"23.253.146.203\",9999\r\n", 75, "+CIPOPEN: 1,0", "ERROR") != 2) {
-        Serial.println(F("ERROR: failed to start TCP connection"));
-        return false;
-    }
-
-    // Determine message length
-    char cipsend_command[22];
-    snprintf(cipsend_command, sizeof(cipsend_command), "AT+CIPSEND=1,%i\r\n", data.length());
-    if(_writeCommand(cipsend_command, 5, ">", "ERROR") != 2) {
-        Serial.println(F("ERROR: failed to initiaite CIPSEND"));
-        return false;
-    }
-
-    // send data message to server
-    char dataChar[data.length()];
-    data.toCharArray(dataChar, data.length());
-    _writeSerial(dataChar);
-    if(_writeCommand("\r\n", 60, "OK", "ERROR") != 2) {
-        Serial.println(F("ERROR: failed to send data message"));
-        return false;
-    }
-
-    // wait for the connection to close before returning
-    _writeCommand("", 10, "CLOSED", "ERROR");
-
-    return true;
 }
 
 bool HologramSIMCOM::_sendResponse(int link, const char* data) {

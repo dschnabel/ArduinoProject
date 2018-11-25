@@ -27,32 +27,36 @@ void setup() {
   Serial.begin(115200);
   while(!Serial);
 
-//  Hologram.debug();
-//
-//  if (!Hologram.begin(8888)) {
-//	  while (1) {
-//		  delay(10000);
-//	  }
-//  }
-//
-//  switch (Hologram.cellStrength()) {
-//      case 0: Serial.println("No signal");break;
-//      case 1: Serial.println("Very poor signal strength"); break;
-//      case 2: Serial.println("Poor signal strength"); break;
-//      case 3: Serial.println("Good signal strength"); break;
-//      case 4: Serial.println("Very good signal strength"); break;
-//      case 5: Serial.println("Excellent signal strength");
-//  }
+  camera_setup();
 
-//  Hologram.send(0, 0, 0, 1, "arduino");
+  Hologram.debug();
+
+  if (!Hologram.begin(8888)) {
+	  while (1) {
+		  delay(10000);
+	  }
+  }
+
+  switch (Hologram.cellStrength()) {
+      case 0: Serial.println("No signal");break;
+      case 1: Serial.println("Very poor signal strength"); break;
+      case 2: Serial.println("Poor signal strength"); break;
+      case 3: Serial.println("Good signal strength"); break;
+      case 4: Serial.println("Very good signal strength"); break;
+      case 5: Serial.println("Excellent signal strength");
+  }
+
+//  Hologram.send(0, 0, 1, 1, "us");
+  Hologram.sendOpenConnection(0, 0, 0, 1);
+  Hologram.sendAppendData("aa");
+  Hologram.sendAppendData("bb");
+  Hologram.sendAppendData("cc");
+  Hologram.sendSendOff();
 
 //  char decoded[100];
 //  strcpy(encoded, all.c_str());
 //  base64_decode(decoded, encoded, strlen(encoded));
 //  Serial.println(decoded);
-
-  camera_setup();
-
 }
 
 
@@ -70,7 +74,7 @@ void loop()
 			control.index = 0;
 
 			while ((len = camera_read_captured_data(data, sizeof(data))) > 0) {
-				base64_encode(&control, encoded, data, sizeof(data));
+				base64_encode(&control, encoded, data, len);
 				Serial.println(encoded);
 				delayMicroseconds(15);
 			}

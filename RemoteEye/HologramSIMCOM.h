@@ -21,6 +21,7 @@ public:
         _DEVICEKEY = deviceKey;
         _DEBUG = false;
         _SERVERPORT = 0;
+        _SENDBUFFER = 0;
     };
     SoftwareSerial serialHologram;
 
@@ -33,11 +34,9 @@ public:
     int cellStrength(); // return cell reception strength [0-none,1-poor,2-good,3-great]
     void debug(); // enables manual serial and verbose monitoring
 
-    bool send(String data); // Send a String to Hologram Cloud
-    bool send(uint8_t client, uint8_t messageNr, uint8_t packetNr, uint8_t type, const char* data); // Send a char array to Hologram Cloud
-
-    bool sendSMS(const char* phoneNum, const char* message); // Send Cloud SMS as char array
-    bool sendSMS(const String phoneNum, String message); // Send Cloud SMS as Strings
+    unsigned int sendOpenConnection(uint8_t client, uint8_t messageNr, uint8_t packetNr, uint8_t type);
+    unsigned int sendAppendData(const String data);
+    bool sendSendOff();
 
     int availableMessage(); // checks if server message, returns message length
     String readMessage(); // returns message as String, resets server, resets message buffer
@@ -50,6 +49,7 @@ private:
     int _DEBUG; // State of debug flag [0-false, 1-true]
     String _MESSAGEBUFFER = ""; // Where we store inbound messages (maybe make it a char array?)
     String _SERIALBUFFER = ""; // Where we store serial reads on line at a time (maybe make it a char array?)
+    unsigned int _SENDBUFFER;
 
     // General modem functions --------------------------------------------
     void _initSerial();
@@ -66,7 +66,6 @@ private:
     // future versions
 
     // Client functions
-    bool _sendMessage(const String data);
     bool _sendResponse(int link, const char* data);
 };
 
