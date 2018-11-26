@@ -31,7 +31,7 @@ void setup() {
 
   Hologram.debug();
 
-  if (!Hologram.begin(8888)) {
+  if (!Hologram.begin(19200)) {
 	  while (1) {
 		  delay(10000);
 	  }
@@ -45,13 +45,6 @@ void setup() {
       case 4: Serial.println("Very good signal strength"); break;
       case 5: Serial.println("Excellent signal strength");
   }
-
-//  Hologram.send(0, 0, 1, 1, "us");
-  Hologram.sendOpenConnection(0, 0, 0, 1);
-  Hologram.sendAppendData("aa");
-  Hologram.sendAppendData("bb");
-  Hologram.sendAppendData("cc");
-  Hologram.sendSendOff();
 
 //  char decoded[100];
 //  strcpy(encoded, all.c_str());
@@ -67,19 +60,52 @@ void loop()
 		case 1:
 			camera_capture_photo();
 
-			byte data[128];
+			byte data[64];
+			byte len = sizeof(data);
 			char encoded[base64_enc_len(sizeof(data))];
-			byte len;
 			encode_control control;
 			control.index = 0;
+			byte messageNr = 0, packetNr = 0;
 
-			while ((len = camera_read_captured_data(data, sizeof(data))) > 0) {
-				base64_encode(&control, encoded, data, len);
-				Serial.println(encoded);
+			Hologram.openSocket();
+			int bufferRemaining = Hologram.sendOpenConnection(0, messageNr, packetNr++, 1);
+			if (bufferRemaining == -1) {
+				break;
+			}
+
+			// fetch camera data, encode as base64 and send to modem
+			while ((len = camera_read_captured_data(data, len)) > 0) {
+				int encLen = base64_encode(&control, encoded, data, len);
+				String e = String(encoded);
+
+				if (bufferRemaining < encLen) {
+					if (bufferRemaining > 0) {
+						String b = e.substring(0, bufferRemaining);
+						e = e.substring(bufferRemaining);
+						Hologram.sendAppendData(b.c_str());
+					}
+
+					Hologram.sendSendOff();
+					bufferRemaining = Hologram.sendOpenConnection(0, messageNr, packetNr++, 1);
+				}
+				if (bufferRemaining >= encLen) {
+					bufferRemaining = Hologram.sendAppendData(e.c_str());
+				}
+
 				delayMicroseconds(15);
 			}
-			base64_encode_finalize(&control, encoded);
-			Serial.println(encoded);
+
+			// encode left-over data and send to modem
+			int encLen = base64_encode_finalize(&control, encoded);
+			if (bufferRemaining < encLen) {
+				Hologram.sendSendOff();
+				bufferRemaining = Hologram.sendOpenConnection(0, messageNr, packetNr++, 1);
+			}
+			if (bufferRemaining >= encLen) {
+				Hologram.sendAppendData(encoded);
+			}
+			Hologram.sendSendOff();
+			Hologram.closeSocket();
 
 			camera_set_capture_done();
 			break;

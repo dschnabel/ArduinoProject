@@ -22,20 +22,23 @@ public:
         _DEBUG = false;
         _SERVERPORT = 0;
         _SENDBUFFER = 0;
+        _SENDCHANNEL = 0;
     };
     SoftwareSerial serialHologram;
 
     // Setup Methods ----------------------------------------------------
-    bool begin(); // Must pass baud to setup module
-    bool begin(const int port); // Passing port will also start module server
+    bool begin(const uint32_t baud); // Must pass baud to setup module
+    bool begin(const uint32_t baud, const int port); // Passing port will also start module server
+    bool openSocket();
+    bool closeSocket();
 
     // Loop Methods ------------------------------------------------------
-    bool cellService(); // checks if we are on the network
     int cellStrength(); // return cell reception strength [0-none,1-poor,2-good,3-great]
     void debug(); // enables manual serial and verbose monitoring
 
-    unsigned int sendOpenConnection(uint8_t client, uint8_t messageNr, uint8_t packetNr, uint8_t type);
-    unsigned int sendAppendData(const String data);
+    int sendOpenConnection(uint8_t client, uint8_t messageNr, uint8_t packetNr, uint8_t type);
+    bool sendCloseConnection();
+    unsigned int sendAppendData(const char *data);
     bool sendSendOff();
 
     int availableMessage(); // checks if server message, returns message length
@@ -50,11 +53,12 @@ private:
     String _MESSAGEBUFFER = ""; // Where we store inbound messages (maybe make it a char array?)
     String _SERIALBUFFER = ""; // Where we store serial reads on line at a time (maybe make it a char array?)
     unsigned int _SENDBUFFER;
+    byte _SENDCHANNEL;
 
     // General modem functions --------------------------------------------
-    void _initSerial();
+    void _initSerial(const uint32_t baud);
     void _stopSerial();
-    void _writeSerial(const char* string); // send command to modem without waiting
+    void _writeSerial(const char* string, bool hide = false); // send command to modem without waiting
     void _writeCommand(const char* command, const unsigned long timeout); // send command to modem and wait
     // Send command, wait response or timeout, return [0-timeout,1-error,2-success]
     int _writeCommand(const char* command, const unsigned long timeout, const String successResp, const String errorResp);

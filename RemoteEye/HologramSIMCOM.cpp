@@ -12,15 +12,15 @@
 PUBLIC
 ---------------------------------------------------------*/
 
-bool HologramSIMCOM::begin() {
+bool HologramSIMCOM::begin(const uint32_t baud) {
     bool initiated = false;
 
-    _initSerial();
+    _initSerial(baud);
     int timeout = 30000;
     while(_writeCommand("AT\r\n", 1, "OK", "ERROR") != 2 && timeout > 0) {
     	_stopSerial();
     	delay(2000);
-    	_initSerial();
+    	_initSerial(baud);
 
     	timeout -= 2000;
     }
@@ -35,7 +35,7 @@ bool HologramSIMCOM::begin() {
     while(1) {
         // Synchronize baud-rate
         char baud_command[20];
-        snprintf(baud_command, sizeof(baud_command), "AT+IPR=%i\r\n", 9600);
+        snprintf(baud_command, sizeof(baud_command), "AT+IPR=%lu\r\n", baud);
         if(_writeCommand(baud_command, 1, "OK", "ERROR") != 2) {
             Serial.println(F("ERROR: begin() failed at +IPR"));
             break;
@@ -63,10 +63,10 @@ bool HologramSIMCOM::begin() {
             break;
         }
 
-        // connect to network
-        if(!_connectNetwork()) {
-            break;
-        }
+//        // connect to network
+//        if(!_connectNetwork()) {
+//            break;
+//        }
 
         initiated = true;
         break;
@@ -75,8 +75,8 @@ bool HologramSIMCOM::begin() {
     return initiated;
 }
 
-bool HologramSIMCOM::begin(const int port) {
-    bool initiated = begin();
+bool HologramSIMCOM::begin(const uint32_t baud, const int port) {
+    bool initiated = begin(baud);
 
     if (initiated) {
         _SERVERPORT = port;
@@ -98,6 +98,21 @@ bool HologramSIMCOM::begin(const int port) {
         }
     }
     return false;
+}
+
+bool HologramSIMCOM::openSocket() {
+	if(!_connectNetwork()) {
+		return false;
+	}
+	return true;
+}
+
+bool HologramSIMCOM::closeSocket() {
+	if(_writeCommand("AT+NETCLOSE\r\n", 5, "OK", "ERROR") != 2) {
+		Serial.println(F("ERROR: Could close socket"));
+		return false;
+	}
+	return true;
 }
 
 void HologramSIMCOM::debug() {
@@ -134,32 +149,6 @@ void HologramSIMCOM::debug() {
     }
 }
 
-bool HologramSIMCOM::cellService() {
-    // check GPRS Status
-    bool connection;
-
-    // need to check each of these commands depending on how connection is lost
-    int gprs = _writeCommand("AT+CGATT?\r\n", 10, "+CGATT: 1", "ERROR");
-    int pdp = _writeCommand("AT+CIPSTATUS?\r\n", 10, "IP", "DEACT");
-    int mux = _writeCommand("AT+CIPMUX?\r\n", 10, "+CIPMUX: 1", "+CIPMUX: 0");
-    int ip = _writeCommand("AT+CIFSR\r\n", 1, ".", "ERROR");
-    int sig = cellStrength();
-
-    if(gprs == 2 && pdp == 2 && mux == 2 && ip == 2 && sig > 0) {
-        connection = true;
-    } else {
-        // if no connection, try reconnecting
-        if(!_connectNetwork()) {
-            Serial.println(F("ERROR: unable to connect to cellular network"));
-            connection = false;
-        }
-        connection = true;
-    }
-
-    return connection;
-}
-
-
 int HologramSIMCOM::cellStrength() {
     if(_writeCommand("AT+CSQ\r\n", 1, "+CSQ:", "ERROR") == 2) {
     	int strength = _SERIALBUFFER.substring(_SERIALBUFFER.indexOf(": ")+2,_SERIALBUFFER.indexOf(",")).toInt();
@@ -182,14 +171,18 @@ int HologramSIMCOM::cellStrength() {
     }
 }
 
-unsigned int HologramSIMCOM::sendOpenConnection(uint8_t client, uint8_t messageNr, uint8_t packetNr, uint8_t type) {
+int HologramSIMCOM::sendOpenConnection(uint8_t client, uint8_t messageNr, uint8_t packetNr, uint8_t type) {
+	_SENDCHANNEL = _SENDCHANNEL < 9 ? _SENDCHANNEL+1 : 0;
+
     // Start TCP connection
-    if(_writeCommand("AT+CIPOPEN=1,\"TCP\",\"23.253.146.203\",9999\r\n", 75, "+CIPOPEN: 1,0", "ERROR") != 2) {
+	String cmd = "AT+CIPOPEN=" + String(_SENDCHANNEL) + ",\"TCP\",\"23.253.146.203\",9999\r\n";
+    if(_writeCommand(cmd.c_str(), 75, "+CIPOPEN:", "ERROR") != 2) {
         Serial.println(F("ERROR: failed to start TCP connection"));
         return -1;
     }
 
-    if(_writeCommand("AT+CIPSEND=1,\r\n", 5, ">", "ERROR") != 2) {
+    cmd = "AT+CIPSEND=" + String(_SENDCHANNEL) + ",\r\n";
+    if(_writeCommand(cmd.c_str(), 5, ">", "ERROR") != 2) {
         Serial.println(F("ERROR: failed to initiaite CIPSEND"));
         return -1;
     }
@@ -206,18 +199,28 @@ unsigned int HologramSIMCOM::sendOpenConnection(uint8_t client, uint8_t messageN
 	message = "{\"k\":\""+ String(_DEVICEKEY)
            + "\",\"d\":\"" + message;
 
-	return sendAppendData(message);
+	return sendAppendData(message.c_str());
 }
 
-unsigned int HologramSIMCOM::sendAppendData(const String data) {
-	if (data.length() > _SENDBUFFER) {
+bool HologramSIMCOM::sendCloseConnection() {
+	String cmd = "AT+CIPCLOSE=" + String(_SENDCHANNEL) + "\r\n";
+    if(_writeCommand(cmd.c_str(), 5, "OK", "ERROR") != 2) {
+        Serial.println(F("ERROR: failed to stop TCP connection"));
+        return false;
+    }
+
+	return true;
+}
+
+unsigned int HologramSIMCOM::sendAppendData(const char *data) {
+	uint8_t len = strlen(data);
+	if (len > _SENDBUFFER) {
 		return -1;
 	}
-	_SENDBUFFER -= data.length();
+	_SENDBUFFER -= len;
 
-	char dataChar[data.length()+1];
-	data.toCharArray(dataChar, data.length()+1);
-	_writeSerial(dataChar);
+	_writeSerial(data, true);
+//	delay(5);
 
 	return _SENDBUFFER;
 }
@@ -226,13 +229,13 @@ bool HologramSIMCOM::sendSendOff() {
 	const char *fin = "\\\"}\"}\r\n";
 	_writeSerial(fin);
 
-    if(_writeCommand("\x1a", 60, "OK", "ERROR") != 2) {
+	_writeCommand("\x1a", 0, "", "");
+
+    // wait for the connection to close before returning
+    if(_writeCommand("", 10, "+IPCLOSE:", "ERROR") != 2) {
         Serial.println(F("ERROR: failed to send data message"));
         return false;
     }
-
-    // wait for the connection to close before returning
-    _writeCommand("", 10, "+IPCLOSE:", "ERROR");
 
     return true;
 }
@@ -306,24 +309,28 @@ void HologramSIMCOM::_checkIfInbound() {
     }
 }
 
-void HologramSIMCOM::_initSerial() {
+void HologramSIMCOM::_initSerial(const uint32_t baud) {
     serialHologram.begin(115200);
 
-    Serial.println(F("Configuring to 9600 baud"));
-    serialHologram.println("AT+IPR=9600"); // Set baud rate
-    serialHologram.begin(9600);
+    String b(baud);
+    String s = "Configuring to " + b + " baud";
+    Serial.println(s);
+
+    s = "AT+IPR=" + b;
+    serialHologram.println(s.c_str()); // Set baud rate
+    serialHologram.begin(baud);
 }
 
 void HologramSIMCOM::_stopSerial() {
 	serialHologram.end();
 }
 
-void HologramSIMCOM::_writeSerial(const char* string) {
+void HologramSIMCOM::_writeSerial(const char* string, bool hide) {
     // Note: this expects you to check state before calling
     // IMPORTANT: I want to tightly control writing to serialHologram,
     // this is the only function allowed to do it
 
-    if(_DEBUG == 1) {
+    if(_DEBUG == 1 && !hide) {
         Serial.print(F("DEBUG: Write Modem Serial = "));
         Serial.println(string);
     }
@@ -406,13 +413,13 @@ bool HologramSIMCOM::_connectNetwork() {
 
         long timeout = 60000;
         while (timeout > 0) {
-        	int timeout2 = 10000;
+        	int timeout2 = 30000;
             while (_writeCommand("AT+NETOPEN\r\n", 5, "+NETOPEN: 0", "+NETOPEN: 1") != 2 && timeout2 > 0) {
             	// Close socket
             	_writeCommand("AT+NETCLOSE\r\n", 5, "", "");
-            	delay(1000);
-            	timeout2 -= 1000;
-            	timeout -= 1000;
+            	delay(3000);
+            	timeout2 -= 3000;
+            	timeout -= 3000;
             }
             if (timeout2 <= 0) {
             	Serial.println(F("ERROR: failed at +NETOPEN (1)"));
