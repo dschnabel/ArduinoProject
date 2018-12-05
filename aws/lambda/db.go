@@ -1,7 +1,6 @@
 package main
 
 import (
-    "strconv"
     "github.com/aws/aws-sdk-go/aws"
     "github.com/aws/aws-sdk-go/aws/session"
     "github.com/aws/aws-sdk-go/service/dynamodb"
@@ -9,31 +8,27 @@ import (
 
 var db = dynamodb.New(session.New(), aws.NewConfig().WithRegion("us-west-2"))
 
-func putItem(iotMessage *iotMessage) error {
-    client := strconv.Itoa(iotMessage.Client)
-    messageNr := strconv.Itoa(iotMessage.MessageNr)
-    packetNr := strconv.Itoa(iotMessage.PacketNr)
-    
+func putItem(ioTEvent *IoTEvent) error {
     input := &dynamodb.PutItemInput{
         TableName: aws.String("Webcam"),
         Item: map[string]*dynamodb.AttributeValue{
             "id": {
-                N: aws.String("1" + client + messageNr + packetNr),
+                N: aws.String("1" + ioTEvent.Client + ioTEvent.Message + ioTEvent.Packet),
             },
             "client": {
-                N: aws.String(client),
+                N: aws.String(ioTEvent.Client),
             },
             "message": {
-                N: aws.String(messageNr),
+                N: aws.String(ioTEvent.Message),
             },
             "packet": {
-                N: aws.String(packetNr),
+                N: aws.String(ioTEvent.Packet),
             },
             "type": {
-                N: aws.String(strconv.Itoa(iotMessage.Type)),
+                N: aws.String(ioTEvent.Type),
             },
             "payload": {
-                S: aws.String(iotMessage.Payload),
+                S: aws.String(ioTEvent.Payload),
             },
         },
     }
