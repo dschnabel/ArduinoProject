@@ -25,7 +25,7 @@ bool HologramSIMCOM::begin(const uint32_t baud) {
     	timeout -= 2000;
     }
     if (timeout <= 0) {
-        Serial.println(F("ERROR: begin() failed at AT"));
+        mySerial->println(F("ERROR: begin() failed at AT"));
         return false;
     }
 
@@ -37,13 +37,13 @@ bool HologramSIMCOM::begin(const uint32_t baud) {
         char baud_command[20];
         snprintf(baud_command, sizeof(baud_command), "AT+IPR=%lu\r\n", baud);
         if(_writeCommand(baud_command, 1, "OK", "ERROR") != 2) {
-            Serial.println(F("ERROR: begin() failed at +IPR"));
+            mySerial->println(F("ERROR: begin() failed at +IPR"));
             break;
         }
 
         // Check if SIM is ready
         if(_writeCommand("AT+CPIN?\r\n", 5, "OK", "ERROR") != 2) {
-            Serial.println(F("ERROR: begin() failed at +CPIN"));
+            mySerial->println(F("ERROR: begin() failed at +CPIN"));
             break;
         }
 
@@ -53,13 +53,13 @@ bool HologramSIMCOM::begin(const uint32_t baud) {
         	timeout -= 500;
         }
         if (timeout <= 0) {
-            Serial.println(F("ERROR: no signal"));
+            mySerial->println(F("ERROR: no signal"));
             break;
         }
 
         // Set SMS Functionality to text
         if(_writeCommand("AT+CMGF=1\r\n", 10, "OK", "ERROR") != 2) {
-            Serial.println(F("ERROR: begin() failed at +CMGF"));
+            mySerial->println(F("ERROR: begin() failed at +CMGF"));
             break;
         }
 
@@ -88,10 +88,10 @@ bool HologramSIMCOM::begin(const uint32_t baud, const int port) {
         delay(500);
         switch(_writeCommand(server_command, 5, "OK", "ERROR")) {
             case 0:
-                Serial.println(F("ERROR: Server start timed out"));
+                mySerial->println(F("ERROR: Server start timed out"));
                 return false;
             case 1:
-                Serial.println(F("ERROR: Server start errored out"));
+                mySerial->println(F("ERROR: Server start errored out"));
                 return false;
             case 2:
                 return true;
@@ -109,26 +109,26 @@ bool HologramSIMCOM::openSocket() {
 
 bool HologramSIMCOM::closeSocket() {
 	if(_writeCommand("AT+NETCLOSE\r\n", 5, "OK", "ERROR") != 2) {
-		Serial.println(F("ERROR: Could close socket"));
+		mySerial->println(F("ERROR: Could close socket"));
 		return false;
 	}
 	return true;
 }
 
 void HologramSIMCOM::debug() {
-    if(_DEBUG == 0) {
+	if(_DEBUG == 0) {
         _DEBUG = 1;
-        Serial.println(F("DEBUG: Verbose monitoring and modem serial access enabled"));
+        mySerial->println(F("DEBUG: Verbose monitoring and modem serial access enabled"));
     }
 
     // keep track of anything written into the MCU serial
     // collect it and write it to the modem serial
-    if (Serial.available() > 0) {
+    if (mySerial->available() > 0) {
         _SERIALBUFFER = "";
 
         delay(100); // allow for buffer to build
-        while(Serial.available() > 0) {
-            char r = Serial.read();
+        while(mySerial->available() > 0) {
+            char r = mySerial->read();
             _SERIALBUFFER += r;
         }
 
@@ -140,9 +140,9 @@ void HologramSIMCOM::debug() {
     // normally we get debug messages when another function runs a modem command
     // but if there is not another function using the modem then we need to listen
     // MAKE SURE Arduino serial monitor is sending both NL & CR!!
-    if(_MODEMSTATE == 1 && serialHologram.available() > 0) {
+    if(_MODEMSTATE == 1 && Serial.available() > 0) {
         _MODEMSTATE = 0;
-        while(serialHologram.available() > 0) {
+        while(Serial.available() > 0) {
             _readSerial();
         }
         _MODEMSTATE = 1;
@@ -177,13 +177,13 @@ int HologramSIMCOM::sendOpenConnection(uint8_t client, uint8_t messageNr, uint8_
     // Start TCP connection
 	String cmd = "AT+CIPOPEN=" + String(_SENDCHANNEL) + ",\"TCP\",\"23.253.146.203\",9999\r\n";
     if(_writeCommand(cmd.c_str(), 75, "+CIPOPEN:", "ERROR") != 2) {
-        Serial.println(F("ERROR: failed to start TCP connection"));
+        mySerial->println(F("ERROR: failed to start TCP connection"));
         return -1;
     }
 
     cmd = "AT+CIPSEND=" + String(_SENDCHANNEL) + ",\r\n";
     if(_writeCommand(cmd.c_str(), 5, ">", "ERROR") != 2) {
-        Serial.println(F("ERROR: failed to initiaite CIPSEND"));
+        mySerial->println(F("ERROR: failed to initiaite CIPSEND"));
         return -1;
     }
 
@@ -205,7 +205,7 @@ int HologramSIMCOM::sendOpenConnection(uint8_t client, uint8_t messageNr, uint8_
 bool HologramSIMCOM::sendCloseConnection() {
 	String cmd = "AT+CIPCLOSE=" + String(_SENDCHANNEL) + "\r\n";
     if(_writeCommand(cmd.c_str(), 5, "OK", "ERROR") != 2) {
-        Serial.println(F("ERROR: failed to stop TCP connection"));
+        mySerial->println(F("ERROR: failed to stop TCP connection"));
         return false;
     }
 
@@ -233,7 +233,7 @@ bool HologramSIMCOM::sendSendOff() {
 
     // wait for the connection to close before returning
     if(_writeCommand("", 10, "+IPCLOSE:", "ERROR") != 2) {
-        Serial.println(F("ERROR: failed to send data message"));
+        mySerial->println(F("ERROR: failed to send data message"));
         return false;
     }
 
@@ -268,10 +268,10 @@ void HologramSIMCOM::_readSerial() {
     // this is the only function allowed to do it
     _SERIALBUFFER = "";
 
-    if (serialHologram.available() > 0) {
+    if (Serial.available() > 0) {
         delay(20); // allow for buffer to build
-        while ( serialHologram.available() > 0 ) { // move serial buffer into global String
-            char r = serialHologram.read();
+        while ( Serial.available() > 0 ) { // move serial buffer into global String
+            char r = Serial.read();
             _SERIALBUFFER += r;
 
             if (_SERIALBUFFER.endsWith("\n" )) { // we read the serial one line at a time
@@ -282,11 +282,11 @@ void HologramSIMCOM::_readSerial() {
         _checkIfInbound();
 
         if(_DEBUG == 1) {
-            Serial.print(F("DEBUG: Modem Serial Buffer = "));
-            Serial.println(_SERIALBUFFER);
+            mySerial->print(F("DEBUG: Modem Serial Buffer = "));
+            mySerial->println(_SERIALBUFFER);
             if(_MESSAGEBUFFER.length() > 0) {
-                Serial.print(F("DEBUG: Message Buffer = "));
-                Serial.println(_MESSAGEBUFFER);
+                mySerial->print(F("DEBUG: Message Buffer = "));
+                mySerial->println(_MESSAGEBUFFER);
             }
         }
     }
@@ -310,19 +310,20 @@ void HologramSIMCOM::_checkIfInbound() {
 }
 
 void HologramSIMCOM::_initSerial(const uint32_t baud) {
-    serialHologram.begin(115200);
+	Serial.begin(115200);
 
     String b(baud);
     String s = "Configuring to " + b + " baud";
-    Serial.println(s);
+    mySerial->println(s);
 
     s = "AT+IPR=" + b;
-    serialHologram.println(s.c_str()); // Set baud rate
-    serialHologram.begin(baud);
+    Serial.println(s.c_str()); // Set baud rate
+    Serial.end();
+    Serial.begin(baud);
 }
 
 void HologramSIMCOM::_stopSerial() {
-	serialHologram.end();
+	Serial.end();
 }
 
 void HologramSIMCOM::_writeSerial(const char* string, bool hide) {
@@ -331,11 +332,11 @@ void HologramSIMCOM::_writeSerial(const char* string, bool hide) {
     // this is the only function allowed to do it
 
     if(_DEBUG == 1 && !hide) {
-        Serial.print(F("DEBUG: Write Modem Serial = "));
-        Serial.println(string);
+        mySerial->print(F("DEBUG: Write Modem Serial = "));
+        mySerial->println(string);
     }
 
-    serialHologram.write(string); // send command
+    Serial.write(string); // send command
 }
 
 void HologramSIMCOM::_writeCommand(const char* command, const unsigned long timeout) {
@@ -386,18 +387,18 @@ int HologramSIMCOM::_writeCommand(const char* command, const unsigned long timeo
         if(_SERIALBUFFER.indexOf(successResp) != -1) {
             return 2;
         } else if(_SERIALBUFFER.indexOf(errorResp) != -1) {
-            Serial.print(F("ERROR: Error resp when calling "));
-            Serial.println(command);
+            mySerial->print(F("ERROR: Error resp when calling "));
+            mySerial->println(command);
             return 1;
         } else { // timed out
-            Serial.print(F("ERROR: Timeout when calling "));
-            Serial.print(command);
-            Serial.print(F(" | elapsed ms = "));
-            Serial.println(timeoutTime);
+            mySerial->print(F("ERROR: Timeout when calling "));
+            mySerial->print(command);
+            mySerial->print(F(" | elapsed ms = "));
+            mySerial->println(timeoutTime);
             return 0;
         }
     } else {
-        Serial.println(F("ERROR: Modem not available"));
+        mySerial->println(F("ERROR: Modem not available"));
         return 1;
     }
 }
@@ -407,7 +408,7 @@ bool HologramSIMCOM::_connectNetwork() {
 
     while(1) {
         if(cellStrength() == 0) {
-            Serial.println(F("ERROR: no signal"));
+            mySerial->println(F("ERROR: no signal"));
             break;
         }
 
@@ -422,7 +423,7 @@ bool HologramSIMCOM::_connectNetwork() {
             	timeout -= 3000;
             }
             if (timeout2 <= 0) {
-            	Serial.println(F("ERROR: failed at +NETOPEN (1)"));
+            	mySerial->println(F("ERROR: failed at +NETOPEN (1)"));
             	break;
             }
             int timeout3 = 5000;
@@ -436,7 +437,7 @@ bool HologramSIMCOM::_connectNetwork() {
             }
         }
         if (timeout <= 0) {
-        	Serial.println(F("ERROR: failed at +NETOPEN (2)"));
+        	mySerial->println(F("ERROR: failed at +NETOPEN (2)"));
         	break;
         }
 
@@ -452,14 +453,14 @@ bool HologramSIMCOM::_sendResponse(int link, const char* data) {
     char cipsend_command[22];
     snprintf(cipsend_command, sizeof(cipsend_command), "AT+CIPSEND=%i,%i\r\n", link, sizeof(data));
     if(_writeCommand(cipsend_command, 5, ">", "ERROR") != 2) {
-        Serial.println(F("ERROR: failed to initiaite CIPSEND"));
+        mySerial->println(F("ERROR: failed to initiaite CIPSEND"));
         return false;
     }
 
     // send data message to server
     _writeSerial(data);
     if(_writeCommand("\r\n", 60, "OK", "ERROR") != 2) {
-        Serial.println(F("ERROR: failed to send data message"));
+        mySerial->println(F("ERROR: failed to send data message"));
         return false;
     }
 

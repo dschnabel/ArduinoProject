@@ -4,16 +4,17 @@
 #include "HologramSIMCOM.h"
 #include "secrets.h"
 
-#define TX_PIN 2
-#define RX_PIN 3
+#define TX_PIN 3
+#define RX_PIN 2
+SoftwareSerial mySerial(TX_PIN,RX_PIN);
 
-HologramSIMCOM Hologram(TX_PIN, RX_PIN, HOLOGRAM_KEY);
+HologramSIMCOM Hologram(&mySerial, HOLOGRAM_KEY);
 
 bool runOnce = true;
 
 byte _get_code() {
-	if (Serial.available()) {
-		int c = Serial.read();
+	if (mySerial.available()) {
+		int c = mySerial.read();
 		if (c == 'f' || c == 0x10) {
 			return 1;
 		}
@@ -24,26 +25,26 @@ byte _get_code() {
 
 void setup() {
 
-  Serial.begin(115200);
-  while(!Serial);
+  mySerial.begin(115200);
+  while(!mySerial);
 
   camera_setup();
 
   Hologram.debug();
 
-  if (!Hologram.begin(19200)) {
+  if (!Hologram.begin(57600)) {
 	  while (1) {
 		  delay(10000);
 	  }
   }
 
   switch (Hologram.cellStrength()) {
-      case 0: Serial.println("No signal");break;
-      case 1: Serial.println("Very poor signal strength"); break;
-      case 2: Serial.println("Poor signal strength"); break;
-      case 3: Serial.println("Good signal strength"); break;
-      case 4: Serial.println("Very good signal strength"); break;
-      case 5: Serial.println("Excellent signal strength");
+      case 0: mySerial.println("No signal");break;
+      case 1: mySerial.println("Very poor signal strength"); break;
+      case 2: mySerial.println("Poor signal strength"); break;
+      case 3: mySerial.println("Good signal strength"); break;
+      case 4: mySerial.println("Very good signal strength"); break;
+      case 5: mySerial.println("Excellent signal strength");
   }
 
 //  char decoded[100];
