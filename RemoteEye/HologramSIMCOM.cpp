@@ -7,6 +7,7 @@
 **/
 
 #include "HologramSIMCOM.h"
+#include "secrets.h"
 
 /*--------------------------------------------------------
 PUBLIC
@@ -57,16 +58,35 @@ bool HologramSIMCOM::begin(const uint32_t baud) {
             break;
         }
 
-        // Set SMS Functionality to text
-        if(_writeCommand("AT+CMGF=1\r\n", 10, "OK", "ERROR") != 2) {
-            mySerial->println(F("ERROR: begin() failed at +CMGF"));
+        // set SSL version
+        if(_writeCommand("AT+CSSLCFG=\"sslversion\",0,3\r\n", 5, "OK", "ERROR") != 2) {
+            mySerial->println(F("ERROR: begin() failed at +CSSLCFG=\"sslversion\""));
             break;
         }
 
-//        // connect to network
-//        if(!_connectNetwork()) {
-//            break;
-//        }
+        // set auth mode
+        if(_writeCommand("AT+CSSLCFG=\"authmode\",0,2\r\n", 5, "OK", "ERROR") != 2) {
+            mySerial->println(F("ERROR: begin() failed at +CSSLCFG=\"authmode\""));
+            break;
+        }
+
+        // set SSL CA
+        if(_writeCommand("AT+CSSLCFG=\"cacert\",0,\"ca_cert.pem\"\r\n", 5, "OK", "ERROR") != 2) {
+            mySerial->println(F("ERROR: begin() failed at +CSSLCFG=\"cacert\",0,\"ca_cert.pem\""));
+            break;
+        }
+
+        // set SSL Client Cert
+        if(_writeCommand("AT+CSSLCFG=\"clientcert\",0,\"client_cert.pem\"\r\n", 5, "OK", "ERROR") != 2) {
+            mySerial->println(F("ERROR: begin() failed at +CSSLCFG=\"clientcert\",0,\"client_cert.pem\""));
+            break;
+        }
+
+        // set SSL Client Key
+        if(_writeCommand("AT+CSSLCFG=\"clientkey\",0,\"client_key.pem\"\r\n", 5, "OK", "ERROR") != 2) {
+            mySerial->println(F("ERROR: begin() failed at +CSSLCFG=\"clientkey\",0,\"client_key.pem\""));
+            break;
+        }
 
         initiated = true;
         break;
@@ -134,7 +154,7 @@ void HologramSIMCOM::debug() {
 
         char write_string[_SERIALBUFFER.length()];
         _SERIALBUFFER.toCharArray(write_string, sizeof(write_string));
-        _writeSerial(write_string);
+        _writeStringToSerial(write_string);
     }
 
     // normally we get debug messages when another function runs a modem command
@@ -171,73 +191,128 @@ int HologramSIMCOM::cellStrength() {
     }
 }
 
-int HologramSIMCOM::sendOpenConnection(uint8_t client, uint8_t messageNr, uint8_t packetNr, uint8_t type) {
-	_SENDCHANNEL = _SENDCHANNEL < 9 ? _SENDCHANNEL+1 : 0;
-
-    // Start TCP connection
-	String cmd = "AT+CIPOPEN=" + String(_SENDCHANNEL) + ",\"TCP\",\"23.253.146.203\",9999\r\n";
-    if(_writeCommand(cmd.c_str(), 75, "+CIPOPEN:", "ERROR") != 2) {
-        mySerial->println(F("ERROR: failed to start TCP connection"));
-        return -1;
+bool HologramSIMCOM::mqttConnect() {
+    // start MQTT service
+	if(_writeCommand("AT+CMQTTSTART\r\n", 5, "+CMQTTSTART: 0", "ERROR") != 2) {
+        mySerial->println(F("ERROR: failed at +CMQTTSTART (start MQTT service)"));
+        return false;
     }
 
-    cmd = "AT+CIPSEND=" + String(_SENDCHANNEL) + ",\r\n";
-    if(_writeCommand(cmd.c_str(), 5, ">", "ERROR") != 2) {
-        mySerial->println(F("ERROR: failed to initiaite CIPSEND"));
-        return -1;
+    // acquire client that will connect to an SSL/TLS MQTT server
+	if(_writeCommand("AT+CMQTTACCQ=0,\"client1\",1\r\n", 5, "OK", "ERROR") != 2) {
+        mySerial->println(F("ERROR: failed at +CMQTTACCQ=0,\"client1\" (acquire client)"));
+        return false;
     }
 
-    _SENDBUFFER = 1500 - 8; // 8 = strlen(fin) + "\x1a", see sendSendOff()
+	// set context to be used in client connection
+	if(_writeCommand("AT+CMQTTSSLCFG=0,0\r\n", 5, "OK", "ERROR") != 2) {
+        mySerial->println(F("ERROR: failed at +CMQTTSSLCFG=0,0 (set context)"));
+        return false;
+    }
 
-	String message = "{";
-	if (client > 0) message += "\"c\":" + String(client) + ",";
-	if (messageNr > 0) message += "\"m\":" + String(messageNr) + ",";
-	if (packetNr > 0) message += "\"p\":" + String(packetNr) + ",";
-	message += "\"t\":" + String(type) + ",\"d\":\"";
+	// don't check UTF-8 encoding
+	if(_writeCommand("AT+CMQTTCFG=\"checkUTF8\",0,0\r\n", 5, "OK", "ERROR") != 2) {
+        mySerial->println(F("ERROR: failed at +CMQTTCFG=0,0 (disable checking for UTF-8)"));
+        return false;
+    }
 
-	message.replace("\"","\\\"");
-	message = "{\"k\":\""+ String(_DEVICEKEY)
-           + "\",\"d\":\"" + message;
-
-	return sendAppendData(message.c_str());
-}
-
-bool HologramSIMCOM::sendCloseConnection() {
-	String cmd = "AT+CIPCLOSE=" + String(_SENDCHANNEL) + "\r\n";
-    if(_writeCommand(cmd.c_str(), 5, "OK", "ERROR") != 2) {
-        mySerial->println(F("ERROR: failed to stop TCP connection"));
+	// connect to server
+	String cmd = "AT+CMQTTCONNECT=0,\"" + String(AWS_IOT_ENDPOINT) + "\",660,1\r\n";
+	if(_writeCommand(cmd.c_str(), 10, "+CMQTTCONNECT: 0,0", "ERROR") != 2) {
+        mySerial->println(F("ERROR: begin() at +CMQTTCONNECT (connect to server)"));
         return false;
     }
 
 	return true;
 }
 
-unsigned int HologramSIMCOM::sendAppendData(const char *data) {
-	uint8_t len = strlen(data);
-	if (len > _SENDBUFFER) {
-		return -1;
-	}
-	_SENDBUFFER -= len;
+bool HologramSIMCOM::mqttDisconnect() {
+	// disconnect from server
+	if(_writeCommand("AT+CMQTTDISC=0,120\r\n", 10, "+CMQTTDISC: 0,0", "ERROR") != 2) {
+        mySerial->println(F("ERROR: failed at +CMQTTDISC=0,120 (disconnect from server)"));
+        //return false;
+    }
 
-	_writeSerial(data, true);
-//	delay(5);
+	// release client
+	if(_writeCommand("AT+CMQTTREL=0\r\n", 5, "OK", "ERROR") != 2) {
+        mySerial->println(F("ERROR: failed at +CMQTTREL=0 (release client)"));
+        //return false;
+    }
+
+	// stop MQTT service
+	if(_writeCommand("AT+CMQTTSTOP\r\n", 5, "OK", "ERROR") != 2) {
+        mySerial->println(F("ERROR: failed at +CMQTTSTOP (stop MQTT service)"));
+        //return false;
+    }
+
+	return true;
+}
+
+int16_t HologramSIMCOM::mqttInitMessage(uint8_t client, uint8_t messageNr, uint8_t type, uint8_t packetNr, uint32_t size) {
+//	_SENDBUFFER = SEND_BUFFER;
+//	mySerial->print("buffer: ");mySerial->println(size < (uint32_t)_SENDBUFFER ? size : _SENDBUFFER);
+//	return _SENDBUFFER;
+
+	// set topic
+	if (1) {
+		String topic = String(client) + "/" + String(messageNr) + "/" + String(type) + "/" + String(packetNr);
+		String cmd = "AT+CMQTTTOPIC=0," + String(topic.length()) + "\r\n";
+		if(_writeCommand(cmd.c_str(), 5, ">", "ERROR") != 2) {
+			mySerial->println(F("ERROR: failed at +CMQTTTOPIC (set topic)"));
+			return -1;
+		}
+
+		_writeStringToSerial(topic.c_str(), true);
+		delay(20);
+	}
+
+    if(_writeCommand("\r\n", 60, "OK", "ERROR") != 2) {
+        mySerial->println(F("ERROR: failed to set topic"));
+        return -1;
+    }
+
+    _SENDBUFFER = SEND_BUFFER;
+
+    // start payload
+    if (1) {
+    	String cmd = "AT+CMQTTPAYLOAD=0," + String(size < (uint32_t)_SENDBUFFER ? size : _SENDBUFFER) + "\r\n";
+    	if(_writeCommand(cmd.c_str(), 5, ">", "ERROR") != 2) {
+    		mySerial->println(F("ERROR: failed at +CMQTTPAYLOAD (start payload)"));
+    		return -1;
+    	}
+    }
 
 	return _SENDBUFFER;
 }
 
-bool HologramSIMCOM::sendSendOff() {
-	const char *fin = "\\\"}\"}\r\n";
-	_writeSerial(fin);
+int16_t HologramSIMCOM::mqttAppendPayload(const byte *payload, uint32_t len) {
+	if (len > (uint32_t)_SENDBUFFER) {
+		return -1;
+	}
+	_SENDBUFFER -= len;
 
-	_writeCommand("\x1a", 0, "", "");
+	_writeBytesToSerial(payload, len, true);
+//	mySerial->print("payload: ");
+//	mySerial->write(payload, len);
+//	mySerial->println();
 
-    // wait for the connection to close before returning
-    if(_writeCommand("", 10, "+IPCLOSE:", "ERROR") != 2) {
-        mySerial->println(F("ERROR: failed to send data message"));
+	return _SENDBUFFER;
+}
+
+bool HologramSIMCOM::mqttPublish() {
+//	mySerial->println("publish");
+//	return true;
+
+	// workaround: need to block here until we're ready to send
+	_writeCommand("AT\r\n", 1, "OK", "ERROR");
+
+	// publish message
+	if(_writeCommand("AT+CMQTTPUB=0,0,60\r\n", 60, "+CMQTTPUB: 0,0", "ERROR") != 2) {
+        mySerial->println(F("ERROR: failed at +CMQTTPUB=0,0,60 (publish message)"));
         return false;
     }
 
-    return true;
+	return true;
 }
 
 int HologramSIMCOM::availableMessage() {
@@ -279,7 +354,7 @@ void HologramSIMCOM::_readSerial() {
             }
         }
 
-        _checkIfInbound();
+//        _checkIfInbound();
 
         if(_DEBUG == 1) {
             mySerial->print(F("DEBUG: Modem Serial Buffer = "));
@@ -292,22 +367,22 @@ void HologramSIMCOM::_readSerial() {
     }
 }
 
-void HologramSIMCOM::_checkIfInbound() {
-    // Check for inbound message and throw incoming into _MESSAGEBUFFER
-    if(_SERIALBUFFER.indexOf("+CLIENT: ") != -1) {
-
-    	int pos = _SERIALBUFFER.indexOf("+CLIENT: ") + strlen("+CLIENT: ");
-    	int link = _SERIALBUFFER.substring(pos, pos + 1).toInt();
-
-    	_MESSAGEBUFFER = _SERIALBUFFER;
-
-        // this is a little wonky, need to override _MODEMSTATE to execute
-        _MODEMSTATE = 1;
-        _sendResponse(link, "OK");
-        _MODEMSTATE = 0;
-
-    }
-}
+//void HologramSIMCOM::_checkIfInbound() {
+//    // Check for inbound message and throw incoming into _MESSAGEBUFFER
+//    if(_SERIALBUFFER.indexOf("+CLIENT: ") != -1) {
+//
+//    	int pos = _SERIALBUFFER.indexOf("+CLIENT: ") + strlen("+CLIENT: ");
+//    	int link = _SERIALBUFFER.substring(pos, pos + 1).toInt();
+//
+//    	_MESSAGEBUFFER = _SERIALBUFFER;
+//
+//        // this is a little wonky, need to override _MODEMSTATE to execute
+//        _MODEMSTATE = 1;
+//        _sendResponse(link, "OK");
+//        _MODEMSTATE = 0;
+//
+//    }
+//}
 
 void HologramSIMCOM::_initSerial(const uint32_t baud) {
 	Serial.begin(115200);
@@ -326,7 +401,7 @@ void HologramSIMCOM::_stopSerial() {
 	Serial.end();
 }
 
-void HologramSIMCOM::_writeSerial(const char* string, bool hide) {
+void HologramSIMCOM::_writeStringToSerial(const char* string, bool hide) {
     // Note: this expects you to check state before calling
     // IMPORTANT: I want to tightly control writing to serialHologram,
     // this is the only function allowed to do it
@@ -339,12 +414,22 @@ void HologramSIMCOM::_writeSerial(const char* string, bool hide) {
     Serial.write(string); // send command
 }
 
+void HologramSIMCOM::_writeBytesToSerial(const byte* bytes, uint32_t len, bool hide) {
+    if(_DEBUG == 1 && !hide) {
+        mySerial->print(F("DEBUG: Write Modem Serial = "));
+        mySerial->write(bytes, len);
+        mySerial->println();
+    }
+
+    Serial.write(bytes, len); // send command
+}
+
 void HologramSIMCOM::_writeCommand(const char* command, const unsigned long timeout) {
     if(_MODEMSTATE == 1) {//check if serial is available
         unsigned start = millis();
         _MODEMSTATE = 0; // set state as busy
 
-        _writeSerial(command); // send command to modem
+        _writeStringToSerial(command); // send command to modem
 
         while(timeout * 1000 > millis() - start) { // wait for timeout to complete
             // only break if there is a response
@@ -367,7 +452,7 @@ int HologramSIMCOM::_writeCommand(const char* command, const unsigned long timeo
         unsigned long start = millis();
         _MODEMSTATE = 0; // set state as busy
 
-        _writeSerial(command); // send command to modem
+        _writeStringToSerial(command); // send command to modem
 
         while(timeout * 1000 > millis() - start) { // wait for timeout to complete
             _readSerial();
@@ -458,7 +543,7 @@ bool HologramSIMCOM::_sendResponse(int link, const char* data) {
     }
 
     // send data message to server
-    _writeSerial(data);
+    _writeStringToSerial(data);
     if(_writeCommand("\r\n", 60, "OK", "ERROR") != 2) {
         mySerial->println(F("ERROR: failed to send data message"));
         return false;

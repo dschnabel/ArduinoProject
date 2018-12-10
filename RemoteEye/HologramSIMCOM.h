@@ -12,16 +12,16 @@
 #include "Arduino.h"
 #include <SoftwareSerial.h>
 
+#define SEND_BUFFER 10240
+
 class HologramSIMCOM {
 public:
 
     // Pre-setup - set globals -----------------------------------------
-    HologramSIMCOM(SoftwareSerial *mySerial, const char* deviceKey) : mySerial(mySerial) {
-        _DEVICEKEY = deviceKey;
+    HologramSIMCOM(SoftwareSerial *mySerial) : mySerial(mySerial) {
         _DEBUG = false;
         _SERVERPORT = 0;
         _SENDBUFFER = 0;
-        _SENDCHANNEL = 0;
     };
     SoftwareSerial *mySerial;
 
@@ -35,29 +35,29 @@ public:
     int cellStrength(); // return cell reception strength [0-none,1-poor,2-good,3-great]
     void debug(); // enables manual serial and verbose monitoring
 
-    int sendOpenConnection(uint8_t client, uint8_t messageNr, uint8_t packetNr, uint8_t type);
-    bool sendCloseConnection();
-    unsigned int sendAppendData(const char *data);
-    bool sendSendOff();
+    bool mqttConnect();
+    bool mqttDisconnect();
+    int16_t mqttInitMessage(uint8_t client, uint8_t messageNr, uint8_t type, uint8_t packetNr, uint32_t size);
+    int16_t mqttAppendPayload(const byte *payload, uint32_t len);
+    bool mqttPublish();
 
     int availableMessage(); // checks if server message, returns message length
     String readMessage(); // returns message as String, resets server, resets message buffer
 
 private:
     // Globals ------------------------------------------------------------
-    const char* _DEVICEKEY; // Hologram's Device Key
     int _SERVERPORT; // Modem's server port
     int _MODEMSTATE = 1; // State of modem [0-busy, 1-available]
     int _DEBUG; // State of debug flag [0-false, 1-true]
     String _MESSAGEBUFFER = ""; // Where we store inbound messages (maybe make it a char array?)
     String _SERIALBUFFER = ""; // Where we store serial reads on line at a time (maybe make it a char array?)
-    unsigned int _SENDBUFFER;
-    byte _SENDCHANNEL;
+    int16_t _SENDBUFFER;
 
     // General modem functions --------------------------------------------
     void _initSerial(const uint32_t baud);
     void _stopSerial();
-    void _writeSerial(const char* string, bool hide = false); // send command to modem without waiting
+    void _writeStringToSerial(const char* string, bool hide = false); // send command to modem without waiting
+    void _writeBytesToSerial(const byte* bytes, uint32_t len, bool hide = false); // send command to modem without waiting
     void _writeCommand(const char* command, const unsigned long timeout); // send command to modem and wait
     // Send command, wait response or timeout, return [0-timeout,1-error,2-success]
     int _writeCommand(const char* command, const unsigned long timeout, const String successResp, const String errorResp);

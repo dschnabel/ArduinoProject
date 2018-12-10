@@ -27,6 +27,7 @@
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/RemoteEye/libraries/Wire/src}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/RemoteEye/libraries/ArduCAM}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/RemoteEye/ArduCAM}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/RemoteEye/libraries/base64/src}&quot;"/>
 								</option>
 								<inputType id="io.sloeber.compiler.cpp.sketch.input.1778675064" name="CPP source files" superClass="io.sloeber.compiler.cpp.sketch.input"/>
 							</tool>
@@ -40,6 +41,7 @@
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/RemoteEye/libraries/Wire/src}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/RemoteEye/libraries/ArduCAM}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/RemoteEye/ArduCAM}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/RemoteEye/libraries/base64/src}&quot;"/>
 								</option>
 								<inputType id="io.sloeber.compiler.c.sketch.input.326190126" name="C Source Files" superClass="io.sloeber.compiler.c.sketch.input"/>
 							</tool>
@@ -53,6 +55,7 @@
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/RemoteEye/libraries/Wire/src}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/RemoteEye/libraries/ArduCAM}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/RemoteEye/ArduCAM}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/RemoteEye/libraries/base64/src}&quot;"/>
 								</option>
 								<inputType id="io.sloeber.compiler.S.sketch.input.2025436554" name="Assembly source files" superClass="io.sloeber.compiler.S.sketch.input"/>
 							</tool>

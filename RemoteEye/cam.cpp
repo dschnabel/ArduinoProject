@@ -26,17 +26,19 @@ const char bmp_header[BMPIMAGEOFFSET] PROGMEM =
 const int camera_CS = 5;
 bool camera_is_header = false;
 bool camera_read_in_progress = false;
+
 ArduCAM myCAM(OV2640, camera_CS);
 
 uint8_t camera_temp = 0, camera_temp_last = 0;
 uint32_t camera_length = 0;
+uint32_t camera_photo_size = 0;
 
 void _camera_prepare_fifo_read() {
 	camera_temp = 0;
 	camera_temp_last = 0;
 	camera_length = 0;
 
-	camera_length = myCAM.read_fifo_length();
+	camera_length = camera_get_photo_size();
 	if (camera_length >= MAX_FIFO_SIZE) { //512 kb
 		return;
 	}
@@ -66,6 +68,7 @@ uint8_t _camera_read_fifo_burst(uint8_t *buffer, uint8_t size)
 		}
 
 		if ((camera_temp == 0xD9) && (camera_temp_last == 0xFF)) {
+			buffer[b_index++] = camera_temp;
 			break;
 		}
 
@@ -149,6 +152,13 @@ void camera_capture_photo() {
 	while (!_camera_capture_ready());
 }
 
+uint32_t camera_get_photo_size() {
+	if (camera_photo_size == 0) {
+		camera_photo_size = myCAM.read_fifo_length();
+	}
+	return camera_photo_size;
+}
+
 uint8_t camera_read_captured_data(uint8_t *buffer, uint8_t size) {
 	uint8_t read = 0;
 
@@ -171,4 +181,5 @@ uint8_t camera_read_captured_data(uint8_t *buffer, uint8_t size) {
 void camera_set_capture_done() {
 	camera_read_in_progress = false;
 	myCAM.clear_fifo_flag();
+	camera_photo_size = 0;
 }
