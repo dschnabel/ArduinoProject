@@ -315,6 +315,13 @@ bool HologramSIMCOM::mqttPublish() {
 	return true;
 }
 
+bool HologramSIMCOM::mqttPublish(uint8_t client, uint8_t messageNr, uint8_t type, uint8_t packetNr,
+		const byte *payload, uint32_t len) {
+	if (mqttInitMessage(client, messageNr, type, packetNr, len) == -1) return false;
+	if (mqttAppendPayload(payload, len) == -1) return false;
+	return mqttPublish();
+}
+
 int HologramSIMCOM::availableMessage() {
     int l = _MESSAGEBUFFER.length();
 

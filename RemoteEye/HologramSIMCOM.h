@@ -40,6 +40,7 @@ public:
     int16_t mqttInitMessage(uint8_t client, uint8_t messageNr, uint8_t type, uint8_t packetNr, uint32_t size);
     int16_t mqttAppendPayload(const byte *payload, uint32_t len);
     bool mqttPublish();
+    bool mqttPublish(uint8_t client, uint8_t messageNr, uint8_t type, uint8_t packetNr, const byte *payload, uint32_t len);
 
     int availableMessage(); // checks if server message, returns message length
     String readMessage(); // returns message as String, resets server, resets message buffer

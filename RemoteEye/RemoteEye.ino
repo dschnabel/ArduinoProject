@@ -1,4 +1,5 @@
 #include "Arduino.h"
+#include <ArduCAM.h>
 #include "cam.h"
 #include "HologramSIMCOM.h"
 #include "secrets.h"
@@ -8,6 +9,8 @@
 SoftwareSerial mySerial(TX_PIN,RX_PIN);
 
 HologramSIMCOM Hologram(&mySerial);
+
+#define CLIENT 0
 
 #define ACTION_CONNECT 1
 #define ACTION_DISCONNECT 2
@@ -33,7 +36,8 @@ void setup() {
   mySerial.begin(57600);
   while(!mySerial);
 
-  camera_setup();
+  camera_setup(OV2640_160x120);
+//  camera_setup(OV2640_640x480);
 
   Hologram.debug();
 
@@ -71,91 +75,88 @@ void loop()
 		break;
 	case ACTION_PHOTO:
 		camera_capture_photo();
-		int32_t photo_size = camera_get_photo_size()* 0.80;
-
-		byte data[64];
-		byte len = sizeof(data);
 		byte messageNr = 0, packetNr = 0;
-		int32_t sent = 0;
 
-		int bufferRemaining = Hologram.mqttInitMessage(0, messageNr, 1, packetNr++, photo_size);
-		if (bufferRemaining == -1) {
-			break;
-		}
+		// put as many variables as possible in new context to prevent stack from being exhausted too soon
+		if (1) {
 
-		////////////
-//		int a = 0;
-		mySerial.print(camera_get_photo_size());mySerial.print(",");mySerial.println(photo_size);
-		////////////
+			byte data[64];
+			byte len = sizeof(data);
+			int32_t photo_size = camera_get_photo_size()* 0.80;
+			int32_t sent = 0;
 
-		// fetch camera data and send to modem
-		while ((len = camera_read_captured_data(data, len)) > 0) {
-			////////////
-//			for (int i = 0; i < len; i++) data[i] = String(a%10).c_str()[0]; a++;
-			////////////
+			int bufferRemaining = Hologram.mqttInitMessage(CLIENT, messageNr, 1, packetNr++, photo_size);
+			if (bufferRemaining == -1) break;
 
-			byte index = 0;
+			// fetch camera data and send to modem
+			while ((len = camera_read_captured_data(data, len)) > 0) {
+				byte index = 0;
 
-			if (bufferRemaining < len) {
-				if (bufferRemaining > 0) {
-					Hologram.mqttAppendPayload(&data[index], bufferRemaining);
-					photo_size -= bufferRemaining;
-					len -= bufferRemaining;
-					index = bufferRemaining;
-					sent += bufferRemaining;
+				if (bufferRemaining < len) {
+					if (bufferRemaining > 0) {
+						Hologram.mqttAppendPayload(&data[index], bufferRemaining);
+						photo_size -= bufferRemaining;
+						len -= bufferRemaining;
+						index = bufferRemaining;
+						sent += bufferRemaining;
+					}
+
+					if (photo_size < SEND_BUFFER) {
+						photo_size = (camera_get_photo_size() - sent) * 0.5;
+						if (photo_size < len) photo_size = len;
+					}
+
+					if (!Hologram.mqttPublish()) break;
+					bufferRemaining = Hologram.mqttInitMessage(CLIENT, messageNr, 1, packetNr++, photo_size);
+					if (bufferRemaining == -1) break;
 				}
 
-				if (photo_size < SEND_BUFFER) {
+				if (photo_size < len) {
+					if (photo_size > 0) {
+						Hologram.mqttAppendPayload(&data[index], photo_size);
+						len -= photo_size;
+						index = photo_size;
+						sent += photo_size;
+					}
+
+					if (!Hologram.mqttPublish()) break;
 					photo_size = (camera_get_photo_size() - sent) * 0.5;
 					if (photo_size < len) photo_size = len;
+					bufferRemaining = Hologram.mqttInitMessage(CLIENT, messageNr, 1, packetNr++, photo_size);
+					if (bufferRemaining == -1) break;
+					mySerial.println(photo_size);
 				}
 
-				if (!Hologram.mqttPublish()) break;
-				bufferRemaining = Hologram.mqttInitMessage(0, messageNr, 1, packetNr++, photo_size);
-				if (bufferRemaining == -1) break;
-			}
-
-			if (photo_size < len) {
-				if (photo_size > 0) {
-					Hologram.mqttAppendPayload(&data[index], photo_size);
-					len -= photo_size;
-					index = photo_size;
-					sent += photo_size;
+				if (bufferRemaining >= len) {
+					bufferRemaining = Hologram.mqttAppendPayload(&data[index], len);
+					if (bufferRemaining == -1) break;
+					photo_size -= len;
+					sent += len;
 				}
 
-				if (!Hologram.mqttPublish()) break;
-				photo_size = (camera_get_photo_size() - sent) * 0.5;
-				if (photo_size < len) photo_size = len;
-				bufferRemaining = Hologram.mqttInitMessage(0, messageNr, 1, packetNr++, photo_size);
-				if (bufferRemaining == -1) break;
-				mySerial.println(photo_size);
+				len = sizeof(data);
+
+				delayMicroseconds(15);
 			}
 
-			if (bufferRemaining >= len) {
-				bufferRemaining = Hologram.mqttAppendPayload(&data[index], len);
-				if (bufferRemaining == -1) break;
+			// padding to fill up send buffer
+			mySerial.print("padding: ");mySerial.println(photo_size);
+			while (photo_size > 0) {
+				len = photo_size < sizeof(data) ? photo_size : sizeof(data);
+
+				uint8_t i;
+				for (i = 0; i < len; i++) data[i] = 0xFF;
+				Hologram.mqttAppendPayload(data, len);
+
 				photo_size -= len;
-				sent += len;
 			}
 
-			len = sizeof(data);
-
-			delayMicroseconds(15);
-		}
-
-		mySerial.print("padding: ");mySerial.println(photo_size);
-		// padding with 0
-		while (photo_size > 0) {
-			len = photo_size < sizeof(data) ? photo_size : sizeof(data);
-
-			uint8_t i;
-			for (i = 0; i < len; i++) data[i] = 0xFF;
-			Hologram.mqttAppendPayload(data, len);
-
-			photo_size -= len;
-		}
+		} // end of context block
 
 		Hologram.mqttPublish();
+
+		// notify done
+		Hologram.mqttPublish(CLIENT, messageNr, 2, packetNr++, (const byte*)"ende", 4);
 
 		camera_set_capture_done();
 		break;

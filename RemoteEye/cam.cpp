@@ -86,7 +86,7 @@ uint8_t _camera_read_fifo_burst(uint8_t *buffer, uint8_t size)
 	return b_index;
 }
 
-void camera_setup() {
+void camera_setup(byte dimension) {
 	uint8_t vid, pid, temp;
 	Wire.begin();
 
@@ -129,8 +129,7 @@ void camera_setup() {
 	myCAM.set_format(JPEG);
 	myCAM.InitCAM();
 
-//	myCAM.OV2640_set_JPEG_size(OV2640_640x480);
-	myCAM.OV2640_set_JPEG_size(OV2640_160x120);
+	myCAM.OV2640_set_JPEG_size(dimension);
 
 	delay(1000);
 	myCAM.clear_fifo_flag();
