@@ -14,8 +14,6 @@ PUBLIC
 ---------------------------------------------------------*/
 
 bool HologramSIMCOM::begin(const uint32_t baud) {
-    bool initiated = false;
-
     _initSerial(baud);
     int timeout = 30000;
     while(_writeCommand("AT\r\n", 1, "OK", "ERROR") != 2 && timeout > 0) {
@@ -33,66 +31,74 @@ bool HologramSIMCOM::begin(const uint32_t baud) {
     _MODEMSTATE = 1; // set state as available
 
     // RUN MODEM BEGIN AT COMMANDS
-    while(1) {
-        // Synchronize baud-rate
-        char baud_command[20];
-        snprintf(baud_command, sizeof(baud_command), "AT+IPR=%lu\r\n", baud);
-        if(_writeCommand(baud_command, 1, "OK", "ERROR") != 2) {
-            mySerial->println(F("ERROR: begin() failed at +IPR"));
-            break;
-        }
 
-        // Check if SIM is ready
-        if(_writeCommand("AT+CPIN?\r\n", 5, "OK", "ERROR") != 2) {
-            mySerial->println(F("ERROR: begin() failed at +CPIN"));
-            break;
-        }
-
-        int timeout = 10000;
-        while (cellStrength() == 0 && timeout > 0) {
-        	delay(500);
-        	timeout -= 500;
-        }
-        if (timeout <= 0) {
-            mySerial->println(F("ERROR: no signal"));
-            break;
-        }
-
-        // set SSL version
-        if(_writeCommand("AT+CSSLCFG=\"sslversion\",0,3\r\n", 5, "OK", "ERROR") != 2) {
-            mySerial->println(F("ERROR: begin() failed at +CSSLCFG=\"sslversion\""));
-            break;
-        }
-
-        // set auth mode
-        if(_writeCommand("AT+CSSLCFG=\"authmode\",0,2\r\n", 5, "OK", "ERROR") != 2) {
-            mySerial->println(F("ERROR: begin() failed at +CSSLCFG=\"authmode\""));
-            break;
-        }
-
-        // set SSL CA
-        if(_writeCommand("AT+CSSLCFG=\"cacert\",0,\"ca_cert.pem\"\r\n", 5, "OK", "ERROR") != 2) {
-            mySerial->println(F("ERROR: begin() failed at +CSSLCFG=\"cacert\",0,\"ca_cert.pem\""));
-            break;
-        }
-
-        // set SSL Client Cert
-        if(_writeCommand("AT+CSSLCFG=\"clientcert\",0,\"client_cert.pem\"\r\n", 5, "OK", "ERROR") != 2) {
-            mySerial->println(F("ERROR: begin() failed at +CSSLCFG=\"clientcert\",0,\"client_cert.pem\""));
-            break;
-        }
-
-        // set SSL Client Key
-        if(_writeCommand("AT+CSSLCFG=\"clientkey\",0,\"client_key.pem\"\r\n", 5, "OK", "ERROR") != 2) {
-            mySerial->println(F("ERROR: begin() failed at +CSSLCFG=\"clientkey\",0,\"client_key.pem\""));
-            break;
-        }
-
-        initiated = true;
-        break;
+    // Synchronize baud-rate
+    char baud_command[20];
+    snprintf(baud_command, sizeof(baud_command), "AT+IPR=%lu\r\n", baud);
+    if(_writeCommand(baud_command, 1, "OK", "ERROR") != 2) {
+    	mySerial->println(F("ERROR: begin() failed at +IPR"));
+    	return false;
     }
 
-    return initiated;
+    // Check if SIM is ready
+    if(_writeCommand("AT+CPIN?\r\n", 5, "OK", "ERROR") != 2) {
+    	mySerial->println(F("ERROR: begin() failed at +CPIN"));
+    	return false;
+    }
+
+    timeout = 10000;
+    while (cellStrength() == 0 && timeout > 0) {
+    	delay(500);
+    	timeout -= 500;
+    }
+    if (timeout <= 0) {
+    	mySerial->println(F("ERROR: no signal"));
+    	return false;
+    }
+
+    // set SSL version
+    if(_writeCommand("AT+CSSLCFG=\"sslversion\",0,3\r\n", 5, "OK", "ERROR") != 2) {
+    	mySerial->println(F("ERROR: begin() failed at +CSSLCFG=\"sslversion\""));
+    	return false;
+    }
+
+    // set auth mode
+    if(_writeCommand("AT+CSSLCFG=\"authmode\",0,2\r\n", 5, "OK", "ERROR") != 2) {
+    	mySerial->println(F("ERROR: begin() failed at +CSSLCFG=\"authmode\""));
+    	return false;
+    }
+
+    // set SSL CA
+    if(_writeCommand("AT+CSSLCFG=\"cacert\",0,\"ca_cert.pem\"\r\n", 5, "OK", "ERROR") != 2) {
+    	mySerial->println(F("ERROR: begin() failed at +CSSLCFG=\"cacert\",0,\"ca_cert.pem\""));
+    	return false;
+    }
+
+    // set SSL Client Cert
+    if(_writeCommand("AT+CSSLCFG=\"clientcert\",0,\"client_cert.pem\"\r\n", 5, "OK", "ERROR") != 2) {
+    	mySerial->println(F("ERROR: begin() failed at +CSSLCFG=\"clientcert\",0,\"client_cert.pem\""));
+    	return false;
+    }
+
+    // set SSL Client Key
+    if(_writeCommand("AT+CSSLCFG=\"clientkey\",0,\"client_key.pem\"\r\n", 5, "OK", "ERROR") != 2) {
+    	mySerial->println(F("ERROR: begin() failed at +CSSLCFG=\"clientkey\",0,\"client_key.pem\""));
+    	return false;
+    }
+
+    // network registration
+    timeout = 30000;
+    while (_writeCommand("AT+COPS?\r\n", 1, "+COPS: 1,0,", "ERROR") != 2 && timeout > 0) {
+    	_writeCommand("AT+CREG?\r\n", 1, "OK", "ERROR");
+    	delay(1000);
+    	timeout -= 1000;
+    }
+    if (timeout == 0) {
+    	mySerial->println(F("ERROR: could not register network"));
+    	return false;
+    }
+
+    return true;
 }
 
 bool HologramSIMCOM::begin(const uint32_t baud, const int port) {
@@ -192,7 +198,7 @@ int HologramSIMCOM::cellStrength() {
 }
 
 bool HologramSIMCOM::mqttConnect() {
-    // start MQTT service
+	// start MQTT service
 	if(_writeCommand("AT+CMQTTSTART\r\n", 5, "+CMQTTSTART: 0", "ERROR") != 2) {
         mySerial->println(F("ERROR: failed at +CMQTTSTART (start MQTT service)"));
         return false;
