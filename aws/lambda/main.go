@@ -4,15 +4,8 @@ import (
     "context"
     "log"
     "os"
-    "time"
-    "bytes"
 
     "github.com/aws/aws-lambda-go/lambda"
-    "github.com/aws/aws-sdk-go/aws/session"
-    "github.com/aws/aws-sdk-go/service/s3"
-    "github.com/aws/aws-sdk-go/aws"
-    "github.com/aws/aws-sdk-go/aws/awserr"
-    "github.com/aws/aws-sdk-go/aws/request"
 )
 
 var errorLogger = log.New(os.Stderr, "ERROR ", log.Llongfile)
@@ -30,70 +23,37 @@ type DbItem struct {
         Payload string `json:"payload"`
 }
 
+func main() {
+    lambda.Start(router)
+}
+
 func router(ctx context.Context, event IoTEvent) {
-    if event.Type == "2" {
-        data, err := assemblePhotoData(&event)
-        if err != nil {
-            errorLogger.Println("Problem with fetching data")
-            errorLogger.Println(err)
-        } else {
-            saveToS3("abc.txt", data)
-        }
+    if event.Type == "1" {
+        dbPutPacket(&event)
+    } else if event.Type == "2" {
+        processPhotoData(&event)
     } else {
-        err := dbPutPacket(&event)
-        if err != nil {
-            errorLogger.Println(err.Error())
-        }
+        errorLogger.Println("Unknown type: " + event.Type)
     }
 }
 
-func assemblePhotoData(event *IoTEvent) ([]byte, error) {
-    payload, err := dbGetMessage(event)
-    if err != nil {
-        return nil, err
+func processPhotoData(event *IoTEvent) {
+    data := assemblePhotoData(event)
+    if data != nil {
+        s3SaveFile("abc.txt", data)
     }
+}
+
+func assemblePhotoData(event *IoTEvent) ([]byte) {
+    payload := dbGetMessage(event)
+    if payload == nil {
+        return nil
+    }
+    
     var data string
     for i := 0; i < len(payload); i++ {
         data += payload[i] + "\n===\n"
     }
     
-    return []byte(data), nil
-}
-
-func saveToS3(filename string, data []byte) error {
-    sess := session.Must(session.NewSession())
-    svc := s3.New(sess)
-    
-    ctx := context.Background()
-    var cancelFn func()
-    
-    timeout, _ := time.ParseDuration("1m")
-    if timeout > 0 {
-        ctx, cancelFn = context.WithTimeout(ctx, timeout)
-    }
-    defer cancelFn()
-    
-    _, err := svc.PutObjectWithContext(ctx, &s3.PutObjectInput{
-        Bucket: aws.String("remote-eye"),
-        Key:    aws.String(filename),
-        Body:   bytes.NewReader(data),
-    })
-    
-    if err != nil {
-        if aerr, ok := err.(awserr.Error); ok && aerr.Code() == request.CanceledErrorCode {
-            errorLogger.Println("upload canceled due to timeout")
-            errorLogger.Println(err)
-        } else {
-            errorLogger.Println("failed to upload object")
-            errorLogger.Println(err)
-        }
-        
-        return err
-    }
-    
-    return nil
-}
-
-func main() {
-    lambda.Start(router)
+    return []byte(data)
 }

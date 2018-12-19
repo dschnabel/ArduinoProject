@@ -11,7 +11,7 @@ import (
 
 var db = dynamodb.New(session.New(), aws.NewConfig().WithRegion("us-west-2"))
 
-func dbPutPacket(ioTEvent *IoTEvent) error {
+func dbPutPacket(ioTEvent *IoTEvent) {
     input := &dynamodb.PutItemInput{
         TableName: aws.String("Webcam"),
         Item: map[string]*dynamodb.AttributeValue{
@@ -37,13 +37,16 @@ func dbPutPacket(ioTEvent *IoTEvent) error {
     }
 
     _, err := db.PutItem(input)
-    return err
+    if err != nil {
+        errorLogger.Println(err.Error())
+    }
 }
 
-func dbGetMessage(ioTEvent *IoTEvent) (map[int]string, error) {
+func dbGetMessage(ioTEvent *IoTEvent) (map[int]string) {
     packets, err := strconv.Atoi(ioTEvent.Packet)
     if err != nil {
-        return nil, err
+        errorLogger.Println(err.Error())
+        return nil
     }
     
     attr := []map[string]*dynamodb.AttributeValue{}
@@ -62,7 +65,8 @@ func dbGetMessage(ioTEvent *IoTEvent) (map[int]string, error) {
     
     result, err := db.BatchGetItem(input)
     if err != nil {
-        return nil, err
+        errorLogger.Println(err.Error())
+        return nil
     }
     
     payload := make(map[int]string)
@@ -70,10 +74,11 @@ func dbGetMessage(ioTEvent *IoTEvent) (map[int]string, error) {
         dbItem := new(DbItem)
         err = dynamodbattribute.UnmarshalMap(element, dbItem)
         if err != nil {
-            return nil, err
+            errorLogger.Println(err.Error())
+            return nil
         }
         payload[dbItem.Packet] = dbItem.Payload
     }
     
-    return payload, nil
+    return payload
 }
