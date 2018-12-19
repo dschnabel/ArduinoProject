@@ -49,21 +49,22 @@ func dbGetMessage(ioTEvent *IoTEvent) (map[int]string) {
         return nil
     }
     
-    attr := []map[string]*dynamodb.AttributeValue{}
+    /////////////////////////////////////// get packets //////////////////////////
+    getAttr := []map[string]*dynamodb.AttributeValue{}
     for i := 0; i < packets; i++ {
-        attr = append(attr, map[string]*dynamodb.AttributeValue{"id": {N: aws.String("1" + ioTEvent.Client + ioTEvent.Message + strconv.Itoa(i))}})
+        getAttr = append(getAttr, map[string]*dynamodb.AttributeValue{"id": {N: aws.String("1" + ioTEvent.Client + ioTEvent.Message + strconv.Itoa(i))}})
     }
     
-    input := &dynamodb.BatchGetItemInput{
+    getInput := &dynamodb.BatchGetItemInput{
         RequestItems: map[string]*dynamodb.KeysAndAttributes{
             "Webcam": {
-                Keys: attr,
+                Keys: getAttr,
                 ProjectionExpression: aws.String("packet, payload"),
             },
         },
     }
     
-    result, err := db.BatchGetItem(input)
+    result, err := db.BatchGetItem(getInput)
     if err != nil {
         errorLogger.Println(err.Error())
         return nil
@@ -79,6 +80,27 @@ func dbGetMessage(ioTEvent *IoTEvent) (map[int]string) {
         }
         payload[dbItem.Packet] = dbItem.Payload
     }
+    /////////////////////////////////////////////////////////////////////////////
+    
+    //////////////////////////////////// delete packets //////////////////////////
+    delAttr :=[]*dynamodb.WriteRequest{}
+    for i := 0; i < packets; i++ {
+        delAttr = append(delAttr, &dynamodb.WriteRequest{DeleteRequest: 
+            &dynamodb.DeleteRequest{Key: map[string]*dynamodb.AttributeValue{"id": {N: aws.String("1" + ioTEvent.Client + ioTEvent.Message + strconv.Itoa(i))}}}});
+    }
+    
+    deleteInput := &dynamodb.BatchWriteItemInput{
+        RequestItems: map[string][]*dynamodb.WriteRequest{
+            "Webcam": delAttr,
+        },
+    }
+    
+    _, err = db.BatchWriteItem(deleteInput)
+        if err != nil {
+        errorLogger.Println(err.Error())
+        return nil
+    }
+    /////////////////////////////////////////////////////////////////////////////
     
     return payload
 }
