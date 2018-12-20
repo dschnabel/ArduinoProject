@@ -45,6 +45,8 @@ public:
     int availableMessage(); // checks if server message, returns message length
     String readMessage(); // returns message as String, resets server, resets message buffer
 
+    int getTimestamp(char *buf, int size);
+
 private:
     // Globals ------------------------------------------------------------
     int _SERVERPORT; // Modem's server port

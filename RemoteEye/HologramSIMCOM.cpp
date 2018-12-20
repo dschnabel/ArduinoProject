@@ -9,6 +9,8 @@
 #include "HologramSIMCOM.h"
 #include "secrets.h"
 
+#include "Time.h"
+
 /*--------------------------------------------------------
 PUBLIC
 ---------------------------------------------------------*/
@@ -86,10 +88,18 @@ bool HologramSIMCOM::begin(const uint32_t baud) {
     	return false;
     }
 
-    // network registration
+    // ------------------- network registration ------------------
+    if(_writeCommand("AT+COPS=1,2,\"302720\",2\r\n", 30, "OK", "+CME ERROR") != 2) {
+    	mySerial->println(F("ERROR: could not register with 3G network, trying 4G now ..."));
+    	if(_writeCommand("AT+COPS=1,2,\"302720\",7\r\n", 30, "OK", "+CME ERROR") != 2) {
+    		mySerial->println(F("ERROR: could not register with 4G network either"));
+    		return false;
+    	}
+    }
     timeout = 30000;
     while (_writeCommand("AT+COPS?\r\n", 1, "+COPS: 1,0,", "ERROR") != 2 && timeout > 0) {
     	_writeCommand("AT+CREG?\r\n", 1, "OK", "ERROR");
+    	_writeCommand("AT+CEREG?\r\n", 1, "OK", "ERROR");
     	delay(1000);
     	timeout -= 1000;
     }
@@ -97,6 +107,7 @@ bool HologramSIMCOM::begin(const uint32_t baud) {
     	mySerial->println(F("ERROR: could not register network"));
     	return false;
     }
+    // ---------------------------------------------------------
 
     return true;
 }
@@ -223,8 +234,7 @@ bool HologramSIMCOM::mqttConnect() {
     }
 
 	// connect to server
-	String cmd = "AT+CMQTTCONNECT=0,\"" + String(AWS_IOT_ENDPOINT) + "\",660,1\r\n";
-	if(_writeCommand(cmd.c_str(), 10, "+CMQTTCONNECT: 0,0", "ERROR") != 2) {
+	if(_writeCommand("AT+CMQTTCONNECT=0,\"" AWS_IOT_ENDPOINT "\",660,1\r\n", 10, "+CMQTTCONNECT: 0,0", "ERROR") != 2) {
         mySerial->println(F("ERROR: begin() at +CMQTTCONNECT (connect to server)"));
         return false;
     }
@@ -261,14 +271,32 @@ int16_t HologramSIMCOM::mqttInitMessage(uint8_t client, uint8_t messageNr, uint8
 
 	// set topic
 	if (1) {
-		String topic = String(client) + "/" + String(messageNr) + "/" + String(type) + "/" + String(packetNr);
-		String cmd = "AT+CMQTTTOPIC=0," + String(topic.length()) + "\r\n";
-		if(_writeCommand(cmd.c_str(), 5, ">", "ERROR") != 2) {
+		char topic[20];
+		memset(topic, 0, sizeof(topic));
+
+		if (1) {
+			char cstr[4];
+			utoa(client, cstr, 10); strcpy(topic, cstr); strcat(topic, "/");
+			utoa(messageNr, cstr, 10); strcat(topic, cstr); strcat(topic, "/");
+			utoa(type, cstr, 10); strcat(topic, cstr); strcat(topic, "/");
+			utoa(packetNr, cstr, 10); strcat(topic, cstr);
+		}
+
+		char cmd[25];
+		memset(cmd, 0, sizeof(cmd));
+
+		if (1) {
+			char cstr[4];
+			utoa(strlen(topic), cstr, 10);
+			strcpy(cmd, "AT+CMQTTTOPIC=0,"); strcat(cmd, cstr); strcat(cmd, "\r\n");
+		}
+
+		if(_writeCommand(cmd, 5, ">", "ERROR") != 2) {
 			mySerial->println(F("ERROR: failed at +CMQTTTOPIC (set topic)"));
 			return -1;
 		}
 
-		_writeStringToSerial(topic.c_str(), true);
+		_writeStringToSerial(topic, true);
 		delay(20);
 	}
 
@@ -281,8 +309,16 @@ int16_t HologramSIMCOM::mqttInitMessage(uint8_t client, uint8_t messageNr, uint8
 
     // start payload
     if (1) {
-    	String cmd = "AT+CMQTTPAYLOAD=0," + String(size < (uint32_t)_SENDBUFFER ? size : _SENDBUFFER) + "\r\n";
-    	if(_writeCommand(cmd.c_str(), 5, ">", "ERROR") != 2) {
+    	char cmd[30];
+    	memset(cmd, 0, sizeof(cmd));
+
+		if (1) {
+			char cstr[8];
+			utoa(size < (uint32_t)_SENDBUFFER ? size : _SENDBUFFER, cstr, 10);
+			strcpy(cmd, "AT+CMQTTPAYLOAD=0,"); strcat(cmd, cstr); strcat(cmd, "\r\n");
+		}
+
+    	if(_writeCommand(cmd, 5, ">", "ERROR") != 2) {
     		mySerial->println(F("ERROR: failed at +CMQTTPAYLOAD (start payload)"));
     		return -1;
     	}
@@ -345,6 +381,33 @@ String HologramSIMCOM::readMessage() {
     String returnMessage = _MESSAGEBUFFER;
     _MESSAGEBUFFER = ""; // wipe _MESSAGEBUFFER
     return returnMessage;
+}
+
+int HologramSIMCOM::getTimestamp(char *buf, int size) {
+	if (_writeCommand("AT+CCLK?\r\n", 2, "+CCLK:", "ERROR") != 2) {
+		mySerial->println(F("ERROR: Could not get time"));
+		return -1;
+	}
+
+	if (1) {
+		String time = _SERIALBUFFER.substring(_SERIALBUFFER.indexOf(": ")+3).substring(0, 20);
+		setTime(time.substring(9,11).toInt(), time.substring(12,14).toInt(), time.substring(15,17).toInt(),
+				time.substring(6,8).toInt(), time.substring(3,5).toInt(), time.substring(0,2).toInt());
+		adjustTime((time.substring(17,20).toInt() / 4) * 60 * 60);
+	}
+
+	time_t t = now();
+	String formattedTime = String(year(t)) + "-" +
+			(month(t) > 9 ? "" : "0") + String(month(t)) + "-" +
+			(day(t) > 9 ? "" : "0") + String(day(t)) + "-" +
+			(hour(t) > 9 ? "" : "0") + String(hour(t)) + "." +
+			(minute(t) > 9 ? "" : "0") + String(minute(t)) + "." +
+			(second(t) > 9 ? "" : "0") + String(second(t));
+
+	memset(buf, 0, size);
+	strncpy(buf, formattedTime.c_str(), size);
+
+	return 0;
 }
 
 /*--------------------------------------------------------

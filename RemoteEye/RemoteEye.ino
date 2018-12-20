@@ -2,7 +2,6 @@
 #include <ArduCAM.h>
 #include "cam.h"
 #include "HologramSIMCOM.h"
-#include "secrets.h"
 
 #define TX_PIN 3
 #define RX_PIN 2
@@ -62,25 +61,32 @@ void loop()
 {
 	byte code = _get_code();
 	switch (code) {
-	case ACTION_CONNECT:
+	case ACTION_CONNECT: {
 		Hologram.mqttConnect();
 		break;
-	case ACTION_DISCONNECT:
+	}
+	case ACTION_DISCONNECT: {
 		Hologram.mqttDisconnect();
-		break;
-	case ACTION_TEST:
+	}
+	break;
+	case ACTION_TEST: {
 		Hologram.mqttInitMessage(0, 0, 1, 0, 3);
 		Hologram.mqttAppendPayload((const byte*)"Hey", 3);
 		Hologram.mqttPublish();
-		break;
-	case ACTION_PHOTO:
+	}
+	break;
+	case ACTION_PHOTO: {
 		camera_capture_photo();
 		byte messageNr = 0, packetNr = 0;
+
+		// get formatted timestamp
+		char timestamp[20];
+		Hologram.getTimestamp(timestamp, sizeof(timestamp));
 
 		// put as many variables as possible in new context to prevent stack from being exhausted too soon
 		if (1) {
 
-			byte data[64];
+			byte data[32];
 			byte len = sizeof(data);
 			int32_t photo_size = camera_get_photo_size()* 0.80;
 			int32_t sent = 0;
@@ -156,9 +162,10 @@ void loop()
 		Hologram.mqttPublish();
 
 		// notify done
-		Hologram.mqttPublish(CLIENT, messageNr, 2, packetNr++, (const byte*)"ende", 4);
+		Hologram.mqttPublish(CLIENT, messageNr, 2, packetNr++, (const byte*)timestamp, strlen(timestamp));
 
 		camera_set_capture_done();
-		break;
+	}
+	break;
 	}
 }
