@@ -5,7 +5,9 @@ import (
     "log"
     "os"
     "time"
+    "bytes"
     "encoding/base64"
+    "encoding/binary"
 
     "github.com/aws/aws-lambda-go/lambda"
 )
@@ -42,13 +44,18 @@ func router(ctx context.Context, event IoTEvent) {
 func processPhotoData(event *IoTEvent) {
     data := assemblePhotoData(event)
     if data != nil && len(data) > 0 {
+        filename := event.Client + "/"
+        
         decoded, err := base64.StdEncoding.DecodeString(event.Payload)
-        var filename string
         if err != nil {
-            errorLogger.Println("Filename decode error: " + err.Error())
-            filename = time.Now().Format("2006-01-02-15.04.05") + "_err.jpg"
+            errorLogger.Println("Timestamp decode error: " + err.Error())
+            filename += time.Now().Format("2006-01-02-15.04.05") + "_err.jpg"
+        } else {        
+            var unixTime uint32
+            buf := bytes.NewBuffer(decoded)
+            binary.Read(buf, binary.LittleEndian, &unixTime)
+            filename += time.Unix(int64(unixTime), 0).Format("2006-01-02-15.04.05") + ".jpg"
         }
-        filename = string(decoded) + ".jpg"
         
         s3SaveFile(filename, data)
     }

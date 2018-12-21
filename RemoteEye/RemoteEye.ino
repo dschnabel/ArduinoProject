@@ -2,6 +2,7 @@
 #include <ArduCAM.h>
 #include "cam.h"
 #include "HologramSIMCOM.h"
+#include "Time.h"
 
 #define TX_PIN 3
 #define RX_PIN 2
@@ -79,9 +80,8 @@ void loop()
 		camera_capture_photo();
 		byte messageNr = 0, packetNr = 0;
 
-		// get formatted timestamp
-		char timestamp[20];
-		Hologram.getTimestamp(timestamp, sizeof(timestamp));
+		// get UNIX timestamp
+		time_t timestamp = Hologram.getTimestamp();
 
 		// put as many variables as possible in new context to prevent stack from being exhausted too soon
 		if (1) {
@@ -162,7 +162,7 @@ void loop()
 		Hologram.mqttPublish();
 
 		// notify done
-		Hologram.mqttPublish(CLIENT, messageNr, 2, packetNr++, (const byte*)timestamp, strlen(timestamp));
+		Hologram.mqttPublish(CLIENT, messageNr, 2, packetNr++, (const byte*)&timestamp, sizeof(time_t));
 
 		camera_set_capture_done();
 	}

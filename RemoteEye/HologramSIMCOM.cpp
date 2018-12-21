@@ -9,8 +9,6 @@
 #include "HologramSIMCOM.h"
 #include "secrets.h"
 
-#include "Time.h"
-
 /*--------------------------------------------------------
 PUBLIC
 ---------------------------------------------------------*/
@@ -88,26 +86,8 @@ bool HologramSIMCOM::begin(const uint32_t baud) {
     	return false;
     }
 
-    // ------------------- network registration ------------------
-    if(_writeCommand("AT+COPS=1,2,\"302720\",2\r\n", 30, "OK", "+CME ERROR") != 2) {
-    	mySerial->println(F("ERROR: could not register with 3G network, trying 4G now ..."));
-    	if(_writeCommand("AT+COPS=1,2,\"302720\",7\r\n", 30, "OK", "+CME ERROR") != 2) {
-    		mySerial->println(F("ERROR: could not register with 4G network either"));
-    		return false;
-    	}
-    }
-    timeout = 30000;
-    while (_writeCommand("AT+COPS?\r\n", 1, "+COPS: 1,0,", "ERROR") != 2 && timeout > 0) {
-    	_writeCommand("AT+CREG?\r\n", 1, "OK", "ERROR");
-    	_writeCommand("AT+CEREG?\r\n", 1, "OK", "ERROR");
-    	delay(1000);
-    	timeout -= 1000;
-    }
-    if (timeout == 0) {
-    	mySerial->println(F("ERROR: could not register network"));
-    	return false;
-    }
-    // ---------------------------------------------------------
+    // network registration
+    _connectNetwork();
 
     return true;
 }
@@ -135,21 +115,6 @@ bool HologramSIMCOM::begin(const uint32_t baud, const int port) {
         }
     }
     return false;
-}
-
-bool HologramSIMCOM::openSocket() {
-	if(!_connectNetwork()) {
-		return false;
-	}
-	return true;
-}
-
-bool HologramSIMCOM::closeSocket() {
-	if(_writeCommand("AT+NETCLOSE\r\n", 5, "OK", "ERROR") != 2) {
-		mySerial->println(F("ERROR: Could close socket"));
-		return false;
-	}
-	return true;
 }
 
 void HologramSIMCOM::debug() {
@@ -383,10 +348,10 @@ String HologramSIMCOM::readMessage() {
     return returnMessage;
 }
 
-int HologramSIMCOM::getTimestamp(char *buf, int size) {
+time_t HologramSIMCOM::getTimestamp() {
 	if (_writeCommand("AT+CCLK?\r\n", 2, "+CCLK:", "ERROR") != 2) {
 		mySerial->println(F("ERROR: Could not get time"));
-		return -1;
+		return 0;
 	}
 
 	if (1) {
@@ -396,18 +361,7 @@ int HologramSIMCOM::getTimestamp(char *buf, int size) {
 		adjustTime((time.substring(17,20).toInt() / 4) * 60 * 60);
 	}
 
-	time_t t = now();
-	String formattedTime = String(year(t)) + "-" +
-			(month(t) > 9 ? "" : "0") + String(month(t)) + "-" +
-			(day(t) > 9 ? "" : "0") + String(day(t)) + "-" +
-			(hour(t) > 9 ? "" : "0") + String(hour(t)) + "." +
-			(minute(t) > 9 ? "" : "0") + String(minute(t)) + "." +
-			(second(t) > 9 ? "" : "0") + String(second(t));
-
-	memset(buf, 0, size);
-	strncpy(buf, formattedTime.c_str(), size);
-
-	return 0;
+	return now();
 }
 
 /*--------------------------------------------------------
@@ -565,48 +519,36 @@ int HologramSIMCOM::_writeCommand(const char* command, const unsigned long timeo
 }
 
 bool HologramSIMCOM::_connectNetwork() {
-    bool connection = false;
+	int timeout = 30000;
+	while (_writeCommand("AT+COPS?\r\n", 1, "+COPS: 1,0,", "ERROR") != 2 && timeout > 0) {
 
-    while(1) {
-        if(cellStrength() == 0) {
-            mySerial->println(F("ERROR: no signal"));
-            break;
-        }
+		if(_writeCommand("AT+COPS=1,2,\"302720\",2\r\n", 30, "OK", "+CME ERROR") == 2) {
+			return true;
+		}
 
-        long timeout = 60000;
-        while (timeout > 0) {
-        	int timeout2 = 30000;
-            while (_writeCommand("AT+NETOPEN\r\n", 5, "+NETOPEN: 0", "+NETOPEN: 1") != 2 && timeout2 > 0) {
-            	// Close socket
-            	_writeCommand("AT+NETCLOSE\r\n", 5, "", "");
-            	delay(3000);
-            	timeout2 -= 3000;
-            	timeout -= 3000;
-            }
-            if (timeout2 <= 0) {
-            	mySerial->println(F("ERROR: failed at +NETOPEN (1)"));
-            	break;
-            }
-            int timeout3 = 5000;
-            while (_writeCommand("AT+NETOPEN?\r\n", 5, "1", "0") != 2 && timeout3 > 0) {
-            	delay(500);
-            	timeout3 -= 500;
-            	timeout -= 500;
-            }
-            if (timeout3 > 0) {
-            	break;
-            }
-        }
-        if (timeout <= 0) {
-        	mySerial->println(F("ERROR: failed at +NETOPEN (2)"));
-        	break;
-        }
+		if(_DEBUG == 1) {
+			mySerial->println(F("ERROR: could not register with 3G network, trying 4G now ..."));
+		}
 
-        connection = true;
-        break;
+		if(_writeCommand("AT+COPS=1,2,\"302720\",7\r\n", 30, "OK", "+CME ERROR") == 2) {
+			return true;
+		}
+
+    	_writeCommand("AT+CREG?\r\n", 1, "OK", "ERROR");
+    	_writeCommand("AT+CEREG?\r\n", 1, "OK", "ERROR");
+
+    	delay(1000);
+    	timeout -= 1000;
+	}
+
+    if (timeout > 0) {
+    	return true;
     }
 
-    return connection;
+    if(_DEBUG == 1) {
+    	mySerial->println(F("ERROR: could not register network"));
+    }
+	return false;
 }
 
 bool HologramSIMCOM::_sendResponse(int link, const char* data) {

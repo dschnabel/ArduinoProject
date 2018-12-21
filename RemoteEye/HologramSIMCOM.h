@@ -10,6 +10,7 @@
 #define __HologramSIMCOM_H__
 
 #include "Arduino.h"
+#include "Time.h"
 #include <SoftwareSerial.h>
 
 #define SEND_BUFFER 10240
@@ -28,8 +29,6 @@ public:
     // Setup Methods ----------------------------------------------------
     bool begin(const uint32_t baud); // Must pass baud to setup module
     bool begin(const uint32_t baud, const int port); // Passing port will also start module server
-    bool openSocket();
-    bool closeSocket();
 
     // Loop Methods ------------------------------------------------------
     int cellStrength(); // return cell reception strength [0-none,1-poor,2-good,3-great]
@@ -45,7 +44,7 @@ public:
     int availableMessage(); // checks if server message, returns message length
     String readMessage(); // returns message as String, resets server, resets message buffer
 
-    int getTimestamp(char *buf, int size);
+    time_t getTimestamp();
 
 private:
     // Globals ------------------------------------------------------------
