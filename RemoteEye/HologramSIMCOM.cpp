@@ -16,7 +16,7 @@ PUBLIC
 bool HologramSIMCOM::begin(const uint32_t baud) {
     _initSerial(baud);
     int timeout = 30000;
-    while(_writeCommand("AT\r\n", 1, "OK", "ERROR") != 2 && timeout > 0) {
+    while(_writeCommand(F("AT\r\n"), 1, F("OK"), F("ERROR")) != 2 && timeout > 0) {
     	_stopSerial();
     	delay(2000);
     	_initSerial(baud);
@@ -35,13 +35,13 @@ bool HologramSIMCOM::begin(const uint32_t baud) {
     // Synchronize baud-rate
     char baud_command[20];
     snprintf(baud_command, sizeof(baud_command), "AT+IPR=%lu\r\n", baud);
-    if(_writeCommand(baud_command, 1, "OK", "ERROR") != 2) {
+    if(_writeCommand(baud_command, 1, F("OK"), F("ERROR")) != 2) {
     	mySerial->println(F("ERROR: begin() failed at +IPR"));
     	return false;
     }
 
     // Check if SIM is ready
-    if(_writeCommand("AT+CPIN?\r\n", 5, "OK", "ERROR") != 2) {
+    if(_writeCommand(F("AT+CPIN?\r\n"), 5, F("OK"), F("ERROR")) != 2) {
     	mySerial->println(F("ERROR: begin() failed at +CPIN"));
     	return false;
     }
@@ -57,31 +57,31 @@ bool HologramSIMCOM::begin(const uint32_t baud) {
     }
 
     // set SSL version
-    if(_writeCommand("AT+CSSLCFG=\"sslversion\",0,3\r\n", 5, "OK", "ERROR") != 2) {
+    if(_writeCommand(F("AT+CSSLCFG=\"sslversion\",0,3\r\n"), 5, F("OK"), F("ERROR")) != 2) {
     	mySerial->println(F("ERROR: begin() failed at +CSSLCFG=\"sslversion\""));
     	return false;
     }
 
     // set auth mode
-    if(_writeCommand("AT+CSSLCFG=\"authmode\",0,2\r\n", 5, "OK", "ERROR") != 2) {
+    if(_writeCommand(F("AT+CSSLCFG=\"authmode\",0,2\r\n"), 5, F("OK"), F("ERROR")) != 2) {
     	mySerial->println(F("ERROR: begin() failed at +CSSLCFG=\"authmode\""));
     	return false;
     }
 
     // set SSL CA
-    if(_writeCommand("AT+CSSLCFG=\"cacert\",0,\"ca_cert.pem\"\r\n", 5, "OK", "ERROR") != 2) {
+    if(_writeCommand(F("AT+CSSLCFG=\"cacert\",0,\"ca_cert.pem\"\r\n"), 5, F("OK"), F("ERROR")) != 2) {
     	mySerial->println(F("ERROR: begin() failed at +CSSLCFG=\"cacert\",0,\"ca_cert.pem\""));
     	return false;
     }
 
     // set SSL Client Cert
-    if(_writeCommand("AT+CSSLCFG=\"clientcert\",0,\"client_cert.pem\"\r\n", 5, "OK", "ERROR") != 2) {
+    if(_writeCommand(F("AT+CSSLCFG=\"clientcert\",0,\"client_cert.pem\"\r\n"), 5, F("OK"), F("ERROR")) != 2) {
     	mySerial->println(F("ERROR: begin() failed at +CSSLCFG=\"clientcert\",0,\"client_cert.pem\""));
     	return false;
     }
 
     // set SSL Client Key
-    if(_writeCommand("AT+CSSLCFG=\"clientkey\",0,\"client_key.pem\"\r\n", 5, "OK", "ERROR") != 2) {
+    if(_writeCommand(F("AT+CSSLCFG=\"clientkey\",0,\"client_key.pem\"\r\n"), 5, F("OK"), F("ERROR")) != 2) {
     	mySerial->println(F("ERROR: begin() failed at +CSSLCFG=\"clientkey\",0,\"client_key.pem\""));
     	return false;
     }
@@ -103,7 +103,7 @@ bool HologramSIMCOM::begin(const uint32_t baud, const int port) {
 
         snprintf(server_command, sizeof(server_command), "AT+SERVERSTART=%i,1\r\n", _SERVERPORT);
         delay(500);
-        switch(_writeCommand(server_command, 5, "OK", "ERROR")) {
+        switch(_writeCommand(server_command, 5, F("OK"), F("ERROR"))) {
             case 0:
                 mySerial->println(F("ERROR: Server start timed out"));
                 return false;
@@ -152,7 +152,7 @@ void HologramSIMCOM::debug() {
 }
 
 int HologramSIMCOM::cellStrength() {
-    if(_writeCommand("AT+CSQ\r\n", 1, "+CSQ:", "ERROR") == 2) {
+    if(_writeCommand(F("AT+CSQ\r\n"), 1, F("+CSQ:"), F("ERROR")) == 2) {
     	int strength = _SERIALBUFFER.substring(_SERIALBUFFER.indexOf(": ")+2,_SERIALBUFFER.indexOf(",")).toInt();
 
         if(strength == 99 || strength == 0) {
@@ -175,31 +175,31 @@ int HologramSIMCOM::cellStrength() {
 
 bool HologramSIMCOM::mqttConnect() {
 	// start MQTT service
-	if(_writeCommand("AT+CMQTTSTART\r\n", 5, "+CMQTTSTART: 0", "ERROR") != 2) {
+	if(_writeCommand(F("AT+CMQTTSTART\r\n"), 5, F("+CMQTTSTART: 0"), F("ERROR")) != 2) {
         mySerial->println(F("ERROR: failed at +CMQTTSTART (start MQTT service)"));
         return false;
     }
 
     // acquire client that will connect to an SSL/TLS MQTT server
-	if(_writeCommand("AT+CMQTTACCQ=0,\"client1\",1\r\n", 5, "OK", "ERROR") != 2) {
+	if(_writeCommand(F("AT+CMQTTACCQ=0,\"client1\",1\r\n"), 5, F("OK"), F("ERROR")) != 2) {
         mySerial->println(F("ERROR: failed at +CMQTTACCQ=0,\"client1\" (acquire client)"));
         return false;
     }
 
 	// set context to be used in client connection
-	if(_writeCommand("AT+CMQTTSSLCFG=0,0\r\n", 5, "OK", "ERROR") != 2) {
+	if(_writeCommand(F("AT+CMQTTSSLCFG=0,0\r\n"), 5, F("OK"), F("ERROR")) != 2) {
         mySerial->println(F("ERROR: failed at +CMQTTSSLCFG=0,0 (set context)"));
         return false;
     }
 
 	// don't check UTF-8 encoding
-	if(_writeCommand("AT+CMQTTCFG=\"checkUTF8\",0,0\r\n", 5, "OK", "ERROR") != 2) {
+	if(_writeCommand(F("AT+CMQTTCFG=\"checkUTF8\",0,0\r\n"), 5, F("OK"), F("ERROR")) != 2) {
         mySerial->println(F("ERROR: failed at +CMQTTCFG=0,0 (disable checking for UTF-8)"));
         return false;
     }
 
 	// connect to server
-	if(_writeCommand("AT+CMQTTCONNECT=0,\"" AWS_IOT_ENDPOINT "\",660,1\r\n", 10, "+CMQTTCONNECT: 0,0", "ERROR") != 2) {
+	if(_writeCommand(F("AT+CMQTTCONNECT=0,\"" AWS_IOT_ENDPOINT "\",660,1\r\n"), 10, F("+CMQTTCONNECT: 0,0"), F("ERROR")) != 2) {
         mySerial->println(F("ERROR: begin() at +CMQTTCONNECT (connect to server)"));
         return false;
     }
@@ -209,19 +209,19 @@ bool HologramSIMCOM::mqttConnect() {
 
 bool HologramSIMCOM::mqttDisconnect() {
 	// disconnect from server
-	if(_writeCommand("AT+CMQTTDISC=0,120\r\n", 10, "+CMQTTDISC: 0,0", "ERROR") != 2) {
+	if(_writeCommand(F("AT+CMQTTDISC=0,120\r\n"), 10, F("+CMQTTDISC: 0,0"), F("ERROR")) != 2) {
         mySerial->println(F("ERROR: failed at +CMQTTDISC=0,120 (disconnect from server)"));
         //return false;
     }
 
 	// release client
-	if(_writeCommand("AT+CMQTTREL=0\r\n", 5, "OK", "ERROR") != 2) {
+	if(_writeCommand(F("AT+CMQTTREL=0\r\n"), 5, F("OK"), F("ERROR")) != 2) {
         mySerial->println(F("ERROR: failed at +CMQTTREL=0 (release client)"));
         //return false;
     }
 
 	// stop MQTT service
-	if(_writeCommand("AT+CMQTTSTOP\r\n", 5, "OK", "ERROR") != 2) {
+	if(_writeCommand(F("AT+CMQTTSTOP\r\n"), 5, F("OK"), F("ERROR")) != 2) {
         mySerial->println(F("ERROR: failed at +CMQTTSTOP (stop MQTT service)"));
         //return false;
     }
@@ -256,7 +256,7 @@ int16_t HologramSIMCOM::mqttInitMessage(uint8_t client, uint8_t messageNr, uint8
 			strcpy(cmd, "AT+CMQTTTOPIC=0,"); strcat(cmd, cstr); strcat(cmd, "\r\n");
 		}
 
-		if(_writeCommand(cmd, 5, ">", "ERROR") != 2) {
+		if(_writeCommand(cmd, 5, F(">"), F("ERROR")) != 2) {
 			mySerial->println(F("ERROR: failed at +CMQTTTOPIC (set topic)"));
 			return -1;
 		}
@@ -265,7 +265,7 @@ int16_t HologramSIMCOM::mqttInitMessage(uint8_t client, uint8_t messageNr, uint8
 		delay(20);
 	}
 
-    if(_writeCommand("\r\n", 60, "OK", "ERROR") != 2) {
+    if(_writeCommand(F("\r\n"), 60, F("OK"), F("ERROR")) != 2) {
         mySerial->println(F("ERROR: failed to set topic"));
         return -1;
     }
@@ -283,7 +283,7 @@ int16_t HologramSIMCOM::mqttInitMessage(uint8_t client, uint8_t messageNr, uint8
 			strcpy(cmd, "AT+CMQTTPAYLOAD=0,"); strcat(cmd, cstr); strcat(cmd, "\r\n");
 		}
 
-    	if(_writeCommand(cmd, 5, ">", "ERROR") != 2) {
+    	if(_writeCommand(cmd, 5, F(">"), F("ERROR")) != 2) {
     		mySerial->println(F("ERROR: failed at +CMQTTPAYLOAD (start payload)"));
     		return -1;
     	}
@@ -311,10 +311,10 @@ bool HologramSIMCOM::mqttPublish() {
 //	return true;
 
 	// workaround: need to block here until we're ready to send
-	_writeCommand("AT\r\n", 1, "OK", "ERROR");
+	_writeCommand(F("AT\r\n"), 1, F("OK"), F("ERROR"));
 
 	// publish message
-	if(_writeCommand("AT+CMQTTPUB=0,0,60\r\n", 60, "+CMQTTPUB: 0,0", "ERROR") != 2) {
+	if(_writeCommand(F("AT+CMQTTPUB=0,0,60\r\n"), 60, F("+CMQTTPUB: 0,0"), F("ERROR")) != 2) {
         mySerial->println(F("ERROR: failed at +CMQTTPUB=0,0,60 (publish message)"));
         return false;
     }
@@ -327,6 +327,130 @@ bool HologramSIMCOM::mqttPublish(uint8_t client, uint8_t messageNr, uint8_t type
 	if (mqttInitMessage(client, messageNr, type, packetNr, len) == -1) return false;
 	if (mqttAppendPayload(payload, len) == -1) return false;
 	return mqttPublish();
+}
+
+bool HologramSIMCOM::mqttSubscribe(uint8_t client) {
+	char topic[5];
+	memset(topic, 0, sizeof(topic));
+
+	if (1) {
+		char cstr[3];
+		utoa(client, cstr, 10); strcpy(topic, cstr); strcat(topic, "/#");
+	}
+
+	char cmd[30];
+	memset(cmd, 0, sizeof(cmd));
+
+	if (1) {
+		char cstr[4];
+		utoa(strlen(topic), cstr, 10);
+		strcpy(cmd, "AT+CMQTTSUB=0,"); strcat(cmd, cstr); strcat(cmd, ",1\r\n");
+	}
+
+	if(_writeCommand(cmd, 10, F(">"), F("ERROR")) != 2) {
+        mySerial->println(F("ERROR: failed at +CMQTTSUB (subscribe to topic)"));
+        return false;
+    }
+
+	_writeStringToSerial(topic);
+	delay(20);
+
+    if(_writeCommand(F("\r\n"), 60, F("+CMQTTSUB: 0,0"), F("ERROR")) != 2) {
+        mySerial->println(F("ERROR: failed to subscribe"));
+        return -1;
+    }
+
+    _LISTENING = true;
+
+	return true;
+}
+
+bool HologramSIMCOM::mqttUnsubscribe(uint8_t client) {
+	char topic[5];
+	memset(topic, 0, sizeof(topic));
+
+	if (1) {
+		char cstr[3];
+		utoa(client, cstr, 10); strcpy(topic, cstr); strcat(topic, "/#");
+	}
+
+	char cmd[30];
+	memset(cmd, 0, sizeof(cmd));
+
+	if (1) {
+		char cstr[4];
+		utoa(strlen(topic), cstr, 10);
+		strcpy(cmd, "AT+CMQTTUNSUB=0,"); strcat(cmd, cstr); strcat(cmd, ",0\r\n");
+	}
+
+	if(_writeCommand(cmd, 10, F(">"), F("ERROR")) != 2) {
+        mySerial->println(F("ERROR: failed at +CMQTTUNSUB (unsubscribe from topic)"));
+        return false;
+    }
+
+	_writeStringToSerial(topic);
+	delay(20);
+
+    if(_writeCommand(F("\r\n"), 60, F("+CMQTTUNSUB: 0,0"), F("ERROR")) != 2) {
+        mySerial->println(F("ERROR: failed to unsubscribe"));
+        return -1;
+    }
+
+    _LISTENING = false;
+
+	return true;
+}
+
+bool HologramSIMCOM::mqttIsListening() {
+	return _LISTENING;
+}
+
+bool HologramSIMCOM::mqttBufferState(byte *state, uint16_t *reportedSize, char *buf, byte size, byte *index) {
+	bool done = false;
+	char c;
+	if ((c = Serial.read()) != -1) {
+//		mySerial->print(c);
+		if (*state < 7) {
+			// wait for the string "PAYLOAD" to appear
+			if (*state == 0) {if (c == 'P') *state = 1; else *state = 0;}
+			else if (*state == 1) {if (c == 'A') *state = 2; else *state = 0;}
+			else if (*state == 2) {if (c == 'Y') *state = 3; else *state = 0;}
+			else if (*state == 3) {if (c == 'L') *state = 4; else *state = 0;}
+			else if (*state == 4) {if (c == 'O') *state = 5; else *state = 0;}
+			else if (*state == 5) {if (c == 'A') *state = 6; else *state = 0;}
+			else if (*state == 6) {if (c == 'D') *state = 7; else *state = 0;}
+		} else if (*state == 7 && c == ',') {
+			// proceed until we reach a comma
+			*state = 8;
+		} else if (*state == 8) {
+			// read length of payload
+			if (isDigit(c)) {
+				buf[*index] = c;
+				*index += 1;
+			} else {
+				*state = 9;
+				*reportedSize = atol(buf);
+				memset(buf, 0, *index);
+				*index = 0;
+			}
+		} else if (*state == 9 && c == '\n') {
+			// proceed to new line for payload
+			*state = 10;
+		} else if (*state == 10) {
+			// read payload into buffer
+			if (*index < size - 1 && *index < *reportedSize) {
+				buf[*index] = c;
+				*index += 1;
+			} else {
+				buf[*index] = '\0';
+				done = true;
+				*index = 0;
+				*state = 0;
+				_readSerial(); // this will flush the remaining bytes from the buffer
+			}
+		}
+	}
+	return done;
 }
 
 int HologramSIMCOM::availableMessage() {
@@ -349,7 +473,7 @@ String HologramSIMCOM::readMessage() {
 }
 
 time_t HologramSIMCOM::getTimestamp() {
-	if (_writeCommand("AT+CCLK?\r\n", 2, "+CCLK:", "ERROR") != 2) {
+	if (_writeCommand(F("AT+CCLK?\r\n"), 2, F("+CCLK:"), F("ERROR")) != 2) {
 		mySerial->println(F("ERROR: Could not get time"));
 		return 0;
 	}
@@ -398,19 +522,13 @@ void HologramSIMCOM::_readSerial() {
 }
 
 //void HologramSIMCOM::_checkIfInbound() {
-//    // Check for inbound message and throw incoming into _MESSAGEBUFFER
-//    if(_SERIALBUFFER.indexOf("+CLIENT: ") != -1) {
+//    //   Check for inbound message and throw incoming into _MESSAGEBUFFER
+//	if(_SERIALBUFFER.indexOf("+CMQTTRXSTART: ") != -1) {
 //
 //    	int pos = _SERIALBUFFER.indexOf("+CLIENT: ") + strlen("+CLIENT: ");
 //    	int link = _SERIALBUFFER.substring(pos, pos + 1).toInt();
 //
 //    	_MESSAGEBUFFER = _SERIALBUFFER;
-//
-//        // this is a little wonky, need to override _MODEMSTATE to execute
-//        _MODEMSTATE = 1;
-//        _sendResponse(link, "OK");
-//        _MODEMSTATE = 0;
-//
 //    }
 //}
 
@@ -432,16 +550,16 @@ void HologramSIMCOM::_stopSerial() {
 }
 
 void HologramSIMCOM::_writeStringToSerial(const char* string, bool hide) {
-    // Note: this expects you to check state before calling
-    // IMPORTANT: I want to tightly control writing to serialHologram,
-    // this is the only function allowed to do it
-
     if(_DEBUG == 1 && !hide) {
         mySerial->print(F("DEBUG: Write Modem Serial = "));
         mySerial->println(string);
     }
 
     Serial.write(string); // send command
+}
+
+void HologramSIMCOM::_writeStringToSerial(const __FlashStringHelper *string, bool hide) {
+	_writeStringToSerial(reinterpret_cast<PGM_P>(string), hide);
 }
 
 void HologramSIMCOM::_writeBytesToSerial(const byte* bytes, uint32_t len, bool hide) {
@@ -454,29 +572,11 @@ void HologramSIMCOM::_writeBytesToSerial(const byte* bytes, uint32_t len, bool h
     Serial.write(bytes, len); // send command
 }
 
-void HologramSIMCOM::_writeCommand(const char* command, const unsigned long timeout) {
-    if(_MODEMSTATE == 1) {//check if serial is available
-        unsigned start = millis();
-        _MODEMSTATE = 0; // set state as busy
-
-        _writeStringToSerial(command); // send command to modem
-
-        while(timeout * 1000 > millis() - start) { // wait for timeout to complete
-            // only break if there is a response
-            while(_SERIALBUFFER.length() == 0) {
-                _readSerial();
-                if(_SERIALBUFFER.length() > 0) {
-                    break;
-                }
-            }
-        }
-
-        _MODEMSTATE = 1; // set state as available
-    }
-}
-
 int HologramSIMCOM::_writeCommand(const char* command, const unsigned long timeout,
-		const String successResp, const String errorResp) {
+		const __FlashStringHelper *successResp, const __FlashStringHelper *errorResp) {
+	char ok[20]; _pgm_get(successResp, ok, sizeof(ok));
+	char error[20]; _pgm_get(errorResp, error, sizeof(error));
+
     unsigned int timeoutTime;
     if(_MODEMSTATE == 1) {//check if serial is available
         unsigned long start = millis();
@@ -486,7 +586,7 @@ int HologramSIMCOM::_writeCommand(const char* command, const unsigned long timeo
 
         while(timeout * 1000 > millis() - start) { // wait for timeout to complete
             _readSerial();
-            if(_SERIALBUFFER.indexOf(successResp) != -1 || _SERIALBUFFER.indexOf(errorResp) != -1) {
+            if(strstr(_SERIALBUFFER.c_str(), ok)  != NULL || strstr(_SERIALBUFFER.c_str(), error)  != NULL) {
                 break;
             }
         }
@@ -499,9 +599,9 @@ int HologramSIMCOM::_writeCommand(const char* command, const unsigned long timeo
 
         _MODEMSTATE = 1; // set state as available
 
-        if(_SERIALBUFFER.indexOf(successResp) != -1) {
+        if(strstr(_SERIALBUFFER.c_str(), ok)  != NULL) {
             return 2;
-        } else if(_SERIALBUFFER.indexOf(errorResp) != -1) {
+        } else if(strstr(_SERIALBUFFER.c_str(), error)  != NULL) {
             mySerial->print(F("ERROR: Error resp when calling "));
             mySerial->println(command);
             return 1;
@@ -518,11 +618,21 @@ int HologramSIMCOM::_writeCommand(const char* command, const unsigned long timeo
     }
 }
 
-bool HologramSIMCOM::_connectNetwork() {
-	int timeout = 30000;
-	while (_writeCommand("AT+COPS?\r\n", 1, "+COPS: 1,0,", "ERROR") != 2 && timeout > 0) {
+int HologramSIMCOM::_writeCommand(const __FlashStringHelper *command, const unsigned long timeout,
+		const __FlashStringHelper *successResp, const __FlashStringHelper *errorResp) {
+	char buf[100];
+	_pgm_get(command, buf, sizeof(buf));
+	return _writeCommand(buf, timeout, successResp, errorResp);
+}
 
-		if(_writeCommand("AT+COPS=1,2,\"302720\",2\r\n", 30, "OK", "+CME ERROR") == 2) {
+bool HologramSIMCOM::_connectNetwork() {
+	_writeCommand(F("AT+CREG?\r\n"), 1, F("OK"), F("ERROR"));
+	_writeCommand(F("AT+CEREG?\r\n"), 1, F("OK"), F("ERROR"));
+
+	int timeout = 30000;
+	while (_writeCommand(F("AT+COPS?\r\n"), 1, F("+COPS: 1,0,"), F("ERROR")) != 2 && timeout > 0) {
+
+		if(_writeCommand(F("AT+COPS=1,2,\"302720\",2\r\n"), 30, F("OK"), F("+CME ERROR")) == 2) {
 			return true;
 		}
 
@@ -530,12 +640,9 @@ bool HologramSIMCOM::_connectNetwork() {
 			mySerial->println(F("ERROR: could not register with 3G network, trying 4G now ..."));
 		}
 
-		if(_writeCommand("AT+COPS=1,2,\"302720\",7\r\n", 30, "OK", "+CME ERROR") == 2) {
+		if(_writeCommand(F("AT+COPS=1,2,\"302720\",7\r\n"), 30, F("OK"), F("+CME ERROR")) == 2) {
 			return true;
 		}
-
-    	_writeCommand("AT+CREG?\r\n", 1, "OK", "ERROR");
-    	_writeCommand("AT+CEREG?\r\n", 1, "OK", "ERROR");
 
     	delay(1000);
     	timeout -= 1000;
@@ -555,17 +662,29 @@ bool HologramSIMCOM::_sendResponse(int link, const char* data) {
     // Determine message length
     char cipsend_command[22];
     snprintf(cipsend_command, sizeof(cipsend_command), "AT+CIPSEND=%i,%i\r\n", link, sizeof(data));
-    if(_writeCommand(cipsend_command, 5, ">", "ERROR") != 2) {
+    if(_writeCommand(cipsend_command, 5, F(">"), F("ERROR")) != 2) {
         mySerial->println(F("ERROR: failed to initiaite CIPSEND"));
         return false;
     }
 
     // send data message to server
     _writeStringToSerial(data);
-    if(_writeCommand("\r\n", 60, "OK", "ERROR") != 2) {
+    if(_writeCommand(F("\r\n"), 60, F("OK"), F("ERROR")) != 2) {
         mySerial->println(F("ERROR: failed to send data message"));
         return false;
     }
 
     return true;
+}
+
+size_t HologramSIMCOM::_pgm_get(const __FlashStringHelper *str, char *buf, size_t size) {
+	  PGM_P p = reinterpret_cast<PGM_P>(str);
+	  size_t n = 0;
+	  while (n < size) {
+	    unsigned char c = pgm_read_byte(p++);
+	    if (c == 0) break;
+	    buf[n++] = c;
+	  }
+	  buf[n] = '\0';
+	  return n;
 }

@@ -23,6 +23,9 @@ public:
         _DEBUG = false;
         _SERVERPORT = 0;
         _SENDBUFFER = 0;
+        _LISTENING = false;
+        _MESSAGEBUFFER.reserve(65);
+        _SERIALBUFFER.reserve(65);
     };
     SoftwareSerial *mySerial;
 
@@ -40,6 +43,10 @@ public:
     int16_t mqttAppendPayload(const byte *payload, uint32_t len);
     bool mqttPublish();
     bool mqttPublish(uint8_t client, uint8_t messageNr, uint8_t type, uint8_t packetNr, const byte *payload, uint32_t len);
+    bool mqttSubscribe(uint8_t client);
+    bool mqttUnsubscribe(uint8_t client);
+    bool mqttIsListening();
+    bool mqttBufferState(byte *state, uint16_t *reportedSize, char *buf, byte size, byte *index);
 
     int availableMessage(); // checks if server message, returns message length
     String readMessage(); // returns message as String, resets server, resets message buffer
@@ -51,18 +58,19 @@ private:
     int _SERVERPORT; // Modem's server port
     int _MODEMSTATE = 1; // State of modem [0-busy, 1-available]
     int _DEBUG; // State of debug flag [0-false, 1-true]
-    String _MESSAGEBUFFER = ""; // Where we store inbound messages (maybe make it a char array?)
-    String _SERIALBUFFER = ""; // Where we store serial reads on line at a time (maybe make it a char array?)
+    String _MESSAGEBUFFER; // Where we store inbound messages (maybe make it a char array?)
+    String _SERIALBUFFER; // Where we store serial reads on line at a time (maybe make it a char array?)
     int16_t _SENDBUFFER;
+    bool _LISTENING;
 
     // General modem functions --------------------------------------------
     void _initSerial(const uint32_t baud);
     void _stopSerial();
     void _writeStringToSerial(const char* string, bool hide = false); // send command to modem without waiting
+    void _writeStringToSerial(const __FlashStringHelper *string, bool hide = false); // send command to modem without waiting
     void _writeBytesToSerial(const byte* bytes, uint32_t len, bool hide = false); // send command to modem without waiting
-    void _writeCommand(const char* command, const unsigned long timeout); // send command to modem and wait
-    // Send command, wait response or timeout, return [0-timeout,1-error,2-success]
-    int _writeCommand(const char* command, const unsigned long timeout, const String successResp, const String errorResp);
+    int _writeCommand(const char* command, const unsigned long timeout, const __FlashStringHelper *successResp, const __FlashStringHelper *errorResp);
+    int _writeCommand(const __FlashStringHelper *command, const unsigned long timeout, const __FlashStringHelper *successResp, const __FlashStringHelper *errorResp);
     void _readSerial(); // reads/analyze modem serial, store read/inbound in globals, set states, etc
     void _checkIfInbound(); // check modem server for inbound messages
     bool _connectNetwork(); // establish a connection to network and set cipstatus in prep to send/receive data
@@ -72,6 +80,8 @@ private:
 
     // Client functions
     bool _sendResponse(int link, const char* data);
+
+    size_t _pgm_get(const __FlashStringHelper *str, char *buf, size_t size);
 };
 
 #endif

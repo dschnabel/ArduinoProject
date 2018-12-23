@@ -10,12 +10,25 @@ SoftwareSerial mySerial(TX_PIN,RX_PIN);
 
 HologramSIMCOM Hologram(&mySerial);
 
+char mqttResponse[100]; // TODO adjust size as needed (e.g. max struct size)
+byte r_index = 0;
+byte state = 0;
+uint16_t reportedSize = 0;
+
 #define CLIENT 0
 
 #define ACTION_CONNECT 1
 #define ACTION_DISCONNECT 2
 #define ACTION_PHOTO 3
 #define ACTION_TEST 4
+#define ACTION_SUBSCRIBE 5
+#define ACTION_UNSUBSCRIBE 6
+
+int freeRam () {
+  extern int __heap_start, *__brkval;
+  int v;
+  return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval);
+}
 
 byte _get_code() {
 	if (mySerial.available()) {
@@ -25,6 +38,8 @@ byte _get_code() {
 		case 'd': return ACTION_DISCONNECT;
 		case 'p': return ACTION_PHOTO;
 		case 't': return ACTION_TEST;
+		case 's': return ACTION_SUBSCRIBE;
+		case 'u': return ACTION_UNSUBSCRIBE;
 		}
 	}
 
@@ -48,13 +63,17 @@ void setup() {
   }
 
   switch (Hologram.cellStrength()) {
-      case 0: mySerial.println("No signal");break;
-      case 1: mySerial.println("Very poor signal strength"); break;
-      case 2: mySerial.println("Poor signal strength"); break;
-      case 3: mySerial.println("Good signal strength"); break;
-      case 4: mySerial.println("Very good signal strength"); break;
-      case 5: mySerial.println("Excellent signal strength");
+      case 0: mySerial.println(F("No signal"));break;
+      case 1: mySerial.println(F("Very poor signal strength")); break;
+      case 2: mySerial.println(F("Poor signal strength")); break;
+      case 3: mySerial.println(F("Good signal strength")); break;
+      case 4: mySerial.println(F("Very good signal strength")); break;
+      case 5: mySerial.println(F("Excellent signal strength"));
   }
+
+  memset(mqttResponse, 0, sizeof(mqttResponse));
+  mySerial.print(F("Free RAM: "));
+  mySerial.println(freeRam());
 }
 
 
@@ -146,7 +165,7 @@ void loop()
 			}
 
 			// padding to fill up send buffer
-			mySerial.print("padding: ");mySerial.println(photo_size);
+			mySerial.print(F("padding: "));mySerial.println(photo_size);
 			while (photo_size > 0) {
 				len = photo_size < sizeof(data) ? photo_size : sizeof(data);
 
@@ -167,5 +186,21 @@ void loop()
 		camera_set_capture_done();
 	}
 	break;
+	case ACTION_SUBSCRIBE: {
+		Hologram.mqttSubscribe(CLIENT);
+	}
+	break;
+	case ACTION_UNSUBSCRIBE: {
+		Hologram.mqttUnsubscribe(CLIENT);
+	}
+	break;
+	}
+
+	if (Hologram.mqttIsListening()) {
+		bool done = Hologram.mqttBufferState(&state, &reportedSize, mqttResponse, sizeof(mqttResponse), &r_index);
+		if (done) {
+			mySerial.println(mqttResponse);
+			memset(mqttResponse, 0, sizeof(mqttResponse));
+		}
 	}
 }
