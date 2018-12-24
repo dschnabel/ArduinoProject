@@ -46,7 +46,7 @@ public:
     bool mqttSubscribe(uint8_t client);
     bool mqttUnsubscribe(uint8_t client);
     bool mqttIsListening();
-    bool mqttBufferState(byte *state, uint16_t *reportedSize, char *buf, byte size, byte *index);
+    bool mqttBufferState(byte *state, uint16_t *reportedSize, byte *type, char *buf, byte size, byte *index);
 
     int availableMessage(); // checks if server message, returns message length
     String readMessage(); // returns message as String, resets server, resets message buffer
@@ -73,13 +73,7 @@ private:
     int _writeCommand(const __FlashStringHelper *command, const unsigned long timeout, const __FlashStringHelper *successResp, const __FlashStringHelper *errorResp);
     void _readSerial(); // reads/analyze modem serial, store read/inbound in globals, set states, etc
     void _checkIfInbound(); // check modem server for inbound messages
-    bool _connectNetwork(); // establish a connection to network and set cipstatus in prep to send/receive data
-
-    // Server functions ---------------------------------------------------
-    // future versions
-
-    // Client functions
-    bool _sendResponse(int link, const char* data);
+    bool _registerNetwork(byte mode);
 
     size_t _pgm_get(const __FlashStringHelper *str, char *buf, size_t size);
 };

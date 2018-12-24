@@ -10,10 +10,11 @@ SoftwareSerial mySerial(TX_PIN,RX_PIN);
 
 HologramSIMCOM Hologram(&mySerial);
 
-char mqttResponse[100]; // TODO adjust size as needed (e.g. max struct size)
+byte mqttResponseType = 0;
+uint16_t mqttReportedTextSize = 0;
+char mqttResponseString[100]; // TODO adjust size as needed (e.g. max struct size)
 byte r_index = 0;
 byte state = 0;
-uint16_t reportedSize = 0;
 
 #define CLIENT 0
 
@@ -71,7 +72,7 @@ void setup() {
       case 5: mySerial.println(F("Excellent signal strength"));
   }
 
-  memset(mqttResponse, 0, sizeof(mqttResponse));
+  memset(mqttResponseString, 0, sizeof(mqttResponseString));
   mySerial.print(F("Free RAM: "));
   mySerial.println(freeRam());
 }
@@ -90,9 +91,7 @@ void loop()
 	}
 	break;
 	case ACTION_TEST: {
-		Hologram.mqttInitMessage(0, 0, 1, 0, 3);
-		Hologram.mqttAppendPayload((const byte*)"Hey", 3);
-		Hologram.mqttPublish();
+		mySerial.println(Serial.read());
 	}
 	break;
 	case ACTION_PHOTO: {
@@ -197,10 +196,14 @@ void loop()
 	}
 
 	if (Hologram.mqttIsListening()) {
-		bool done = Hologram.mqttBufferState(&state, &reportedSize, mqttResponse, sizeof(mqttResponse), &r_index);
+		bool done = Hologram.mqttBufferState(&state, &mqttReportedTextSize, &mqttResponseType,
+				mqttResponseString, sizeof(mqttResponseString), &r_index);
+
 		if (done) {
-			mySerial.println(mqttResponse);
-			memset(mqttResponse, 0, sizeof(mqttResponse));
+			mySerial.println(mqttResponseType);
+			mySerial.println(mqttResponseString);
+			mqttResponseType = 0;
+			memset(mqttResponseString, 0, sizeof(mqttResponseString));
 		}
 	}
 }

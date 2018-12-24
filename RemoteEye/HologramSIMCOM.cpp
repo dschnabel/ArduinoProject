@@ -9,6 +9,9 @@
 #include "HologramSIMCOM.h"
 #include "secrets.h"
 
+#define UMTS_3G 0
+#define LTE_4G 1
+
 /*--------------------------------------------------------
 PUBLIC
 ---------------------------------------------------------*/
@@ -85,9 +88,6 @@ bool HologramSIMCOM::begin(const uint32_t baud) {
     	mySerial->println(F("ERROR: begin() failed at +CSSLCFG=\"clientkey\",0,\"client_key.pem\""));
     	return false;
     }
-
-    // network registration
-    _connectNetwork();
 
     return true;
 }
@@ -174,9 +174,27 @@ int HologramSIMCOM::cellStrength() {
 }
 
 bool HologramSIMCOM::mqttConnect() {
-	// start MQTT service
-	if(_writeCommand(F("AT+CMQTTSTART\r\n"), 5, F("+CMQTTSTART: 0"), F("ERROR")) != 2) {
-        mySerial->println(F("ERROR: failed at +CMQTTSTART (start MQTT service)"));
+    // network registration & MQTT service start
+    int timeout = 30000;
+    byte mode = UMTS_3G;
+    bool registered = true;
+    while((!registered || _writeCommand(F("AT+CMQTTSTART\r\n"), 5, F("+CMQTTSTART: 0"), F("ERROR")) != 2) && timeout > 0) {
+    	if (!_registerNetwork(mode)) {
+    		registered = false;
+    	} else {
+    		registered = true;
+    	}
+
+    	if (mode == UMTS_3G) {
+    		mode = LTE_4G;
+    	} else if (mode == LTE_4G) {
+    		mode = UMTS_3G;
+    	}
+
+    	timeout -= 2000;
+    }
+    if (timeout <= 0) {
+        mySerial->println(F("ERROR: mqttConnect() failed, could not establish connection"));
         return false;
     }
 
@@ -230,18 +248,15 @@ bool HologramSIMCOM::mqttDisconnect() {
 }
 
 int16_t HologramSIMCOM::mqttInitMessage(uint8_t client, uint8_t messageNr, uint8_t type, uint8_t packetNr, uint32_t size) {
-//	_SENDBUFFER = SEND_BUFFER;
-//	mySerial->print("buffer: ");mySerial->println(size < (uint32_t)_SENDBUFFER ? size : _SENDBUFFER);
-//	return _SENDBUFFER;
-
 	// set topic
 	if (1) {
 		char topic[20];
 		memset(topic, 0, sizeof(topic));
+		strcpy(topic, "s/");
 
 		if (1) {
 			char cstr[4];
-			utoa(client, cstr, 10); strcpy(topic, cstr); strcat(topic, "/");
+			utoa(client, cstr, 10); strcat(topic, cstr); strcat(topic, "/");
 			utoa(messageNr, cstr, 10); strcat(topic, cstr); strcat(topic, "/");
 			utoa(type, cstr, 10); strcat(topic, cstr); strcat(topic, "/");
 			utoa(packetNr, cstr, 10); strcat(topic, cstr);
@@ -264,11 +279,6 @@ int16_t HologramSIMCOM::mqttInitMessage(uint8_t client, uint8_t messageNr, uint8
 		_writeStringToSerial(topic, true);
 		delay(20);
 	}
-
-    if(_writeCommand(F("\r\n"), 60, F("OK"), F("ERROR")) != 2) {
-        mySerial->println(F("ERROR: failed to set topic"));
-        return -1;
-    }
 
     _SENDBUFFER = SEND_BUFFER;
 
@@ -299,17 +309,11 @@ int16_t HologramSIMCOM::mqttAppendPayload(const byte *payload, uint32_t len) {
 	_SENDBUFFER -= len;
 
 	_writeBytesToSerial(payload, len, true);
-//	mySerial->print("payload: ");
-//	mySerial->write(payload, len);
-//	mySerial->println();
 
 	return _SENDBUFFER;
 }
 
 bool HologramSIMCOM::mqttPublish() {
-//	mySerial->println("publish");
-//	return true;
-
 	// workaround: need to block here until we're ready to send
 	_writeCommand(F("AT\r\n"), 1, F("OK"), F("ERROR"));
 
@@ -330,12 +334,13 @@ bool HologramSIMCOM::mqttPublish(uint8_t client, uint8_t messageNr, uint8_t type
 }
 
 bool HologramSIMCOM::mqttSubscribe(uint8_t client) {
-	char topic[5];
+	char topic[7];
 	memset(topic, 0, sizeof(topic));
+	strcpy(topic, "c/");
 
 	if (1) {
 		char cstr[3];
-		utoa(client, cstr, 10); strcpy(topic, cstr); strcat(topic, "/#");
+		utoa(client, cstr, 10); strcat(topic, cstr); strcat(topic, "/#");
 	}
 
 	char cmd[30];
@@ -366,12 +371,13 @@ bool HologramSIMCOM::mqttSubscribe(uint8_t client) {
 }
 
 bool HologramSIMCOM::mqttUnsubscribe(uint8_t client) {
-	char topic[5];
+	char topic[7];
 	memset(topic, 0, sizeof(topic));
+	strcpy(topic, "c/");
 
 	if (1) {
 		char cstr[3];
-		utoa(client, cstr, 10); strcpy(topic, cstr); strcat(topic, "/#");
+		utoa(client, cstr, 10); strcat(topic, cstr); strcat(topic, "/#");
 	}
 
 	char cmd[30];
@@ -405,20 +411,34 @@ bool HologramSIMCOM::mqttIsListening() {
 	return _LISTENING;
 }
 
-bool HologramSIMCOM::mqttBufferState(byte *state, uint16_t *reportedSize, char *buf, byte size, byte *index) {
+bool HologramSIMCOM::mqttBufferState(byte *state, uint16_t *reportedSize, byte *type, char *buf, byte size, byte *index) {
 	bool done = false;
 	char c;
 	if ((c = Serial.read()) != -1) {
 //		mySerial->print(c);
-		if (*state < 7) {
-			// wait for the string "PAYLOAD" to appear
-			if (*state == 0) {if (c == 'P') *state = 1; else *state = 0;}
-			else if (*state == 1) {if (c == 'A') *state = 2; else *state = 0;}
-			else if (*state == 2) {if (c == 'Y') *state = 3; else *state = 0;}
-			else if (*state == 3) {if (c == 'L') *state = 4; else *state = 0;}
-			else if (*state == 4) {if (c == 'O') *state = 5; else *state = 0;}
-			else if (*state == 5) {if (c == 'A') *state = 6; else *state = 0;}
-			else if (*state == 6) {if (c == 'D') *state = 7; else *state = 0;}
+		if (*state < 5) {
+			if (*state == 0) {if (c == 'T') *state = 1; else *state = 0;}
+			else if (*state == 1) {if (c == 'O') *state = 2; else *state = 0;}
+			else if (*state == 2) {if (c == 'P') *state = 3; else *state = 0;}
+			else if (*state == 3) {if (c == 'I') *state = 4; else *state = 0;}
+			else if (*state == 4) {if (c == 'C') *state = 5; else *state = 0;}
+		} else if (*state == 5 && c == '\n') {
+			// proceed to new line for topic
+			*state = 6;
+		} else if (*state == 6) {
+			// save topic to buffer
+			if (c != '\n' && c != '\r') {
+				buf[*index] = c;
+				*index += 1;
+			} else if (c == '\n') {
+				// extract last section of topic which is our type
+				*state = 7;
+				char *p = strrchr(buf, '/');
+				if (p) *type = atol(p + 1);
+				else *type = 0;
+				memset(buf, 0, *index);
+				*index = 0;
+			}
 		} else if (*state == 7 && c == ',') {
 			// proceed until we reach a comma
 			*state = 8;
@@ -579,6 +599,8 @@ int HologramSIMCOM::_writeCommand(const char* command, const unsigned long timeo
 
     unsigned int timeoutTime;
     if(_MODEMSTATE == 1) {//check if serial is available
+    	_readSerial(); // flush any old messages
+
         unsigned long start = millis();
         _MODEMSTATE = 0; // set state as busy
 
@@ -625,56 +647,28 @@ int HologramSIMCOM::_writeCommand(const __FlashStringHelper *command, const unsi
 	return _writeCommand(buf, timeout, successResp, errorResp);
 }
 
-bool HologramSIMCOM::_connectNetwork() {
+bool HologramSIMCOM::_registerNetwork(byte mode) {
+	_writeCommand(F("AT+COPS?\r\n"), 1, F("+COPS: 1,0,"), F("ERROR"));
 	_writeCommand(F("AT+CREG?\r\n"), 1, F("OK"), F("ERROR"));
 	_writeCommand(F("AT+CEREG?\r\n"), 1, F("OK"), F("ERROR"));
 
-	int timeout = 30000;
-	while (_writeCommand(F("AT+COPS?\r\n"), 1, F("+COPS: 1,0,"), F("ERROR")) != 2 && timeout > 0) {
-
+	if (mode == UMTS_3G) {
 		if(_writeCommand(F("AT+COPS=1,2,\"302720\",2\r\n"), 30, F("OK"), F("+CME ERROR")) == 2) {
 			return true;
 		}
-
-		if(_DEBUG == 1) {
-			mySerial->println(F("ERROR: could not register with 3G network, trying 4G now ..."));
-		}
-
+	} else if (mode == LTE_4G) {
 		if(_writeCommand(F("AT+COPS=1,2,\"302720\",7\r\n"), 30, F("OK"), F("+CME ERROR")) == 2) {
 			return true;
 		}
-
-    	delay(1000);
-    	timeout -= 1000;
 	}
 
-    if (timeout > 0) {
-    	return true;
-    }
+	if (mode == UMTS_3G) {
+		mySerial->println(F("ERROR: Could not connect to 3G network"));
+	} else if (mode == LTE_4G) {
+		mySerial->println(F("ERROR: Could not connect to 4G network"));
+	}
 
-    if(_DEBUG == 1) {
-    	mySerial->println(F("ERROR: could not register network"));
-    }
 	return false;
-}
-
-bool HologramSIMCOM::_sendResponse(int link, const char* data) {
-    // Determine message length
-    char cipsend_command[22];
-    snprintf(cipsend_command, sizeof(cipsend_command), "AT+CIPSEND=%i,%i\r\n", link, sizeof(data));
-    if(_writeCommand(cipsend_command, 5, F(">"), F("ERROR")) != 2) {
-        mySerial->println(F("ERROR: failed to initiaite CIPSEND"));
-        return false;
-    }
-
-    // send data message to server
-    _writeStringToSerial(data);
-    if(_writeCommand(F("\r\n"), 60, F("OK"), F("ERROR")) != 2) {
-        mySerial->println(F("ERROR: failed to send data message"));
-        return false;
-    }
-
-    return true;
 }
 
 size_t HologramSIMCOM::_pgm_get(const __FlashStringHelper *str, char *buf, size_t size) {
