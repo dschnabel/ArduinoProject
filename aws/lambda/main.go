@@ -6,6 +6,7 @@ import (
     "os"
     "time"
     "bytes"
+    "strings"
     "encoding/base64"
     "encoding/binary"
 
@@ -32,13 +33,20 @@ func main() {
 }
 
 func router(ctx context.Context, event IoTEvent) {
-    if event.Type == "1" {
+    if event.Type == "0" {
+        clientSubscribed(event.Payload)
+    } else if event.Type == "1" {
         dbPutPacket(&event)
     } else if event.Type == "2" {
         processPhotoData(&event)
     } else {
         errorLogger.Println("Unknown type: " + event.Type)
     }
+}
+
+func clientSubscribed(payload string) {
+    client := strings.Split(payload, "/")[1]
+    errorLogger.Println("Is there a message for client? " + client)
 }
 
 func processPhotoData(event *IoTEvent) {

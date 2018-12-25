@@ -2,6 +2,7 @@ package main
 
 import (
     "strconv"
+    "time"
     
     "github.com/aws/aws-sdk-go/aws"
     "github.com/aws/aws-sdk-go/aws/session"
@@ -55,30 +56,46 @@ func dbGetMessage(ioTEvent *IoTEvent) (map[int]string) {
         getAttr = append(getAttr, map[string]*dynamodb.AttributeValue{"id": {N: aws.String("1" + ioTEvent.Client + ioTEvent.Message + strconv.Itoa(i))}})
     }
     
-    getInput := &dynamodb.BatchGetItemInput{
-        RequestItems: map[string]*dynamodb.KeysAndAttributes{
-            "Webcam": {
-                Keys: getAttr,
-                ProjectionExpression: aws.String("packet, payload"),
+    tries := 0
+    var payload map[int]string
+    for {
+        getInput := &dynamodb.BatchGetItemInput{
+            RequestItems: map[string]*dynamodb.KeysAndAttributes{
+                "Webcam": {
+                    Keys: getAttr,
+                    ProjectionExpression: aws.String("packet, payload"),
+                },
             },
-        },
-    }
-    
-    result, err := db.BatchGetItem(getInput)
-    if err != nil {
-        errorLogger.Println(err.Error())
-        return nil
-    }
-    
-    payload := make(map[int]string)
-    for _, element := range result.Responses["Webcam"] {
-        dbItem := new(DbItem)
-        err = dynamodbattribute.UnmarshalMap(element, dbItem)
+        }
+        
+        result, err := db.BatchGetItem(getInput)
         if err != nil {
             errorLogger.Println(err.Error())
             return nil
         }
-        payload[dbItem.Packet] = dbItem.Payload
+        
+        payload = make(map[int]string)
+        for _, element := range result.Responses["Webcam"] {
+            dbItem := new(DbItem)
+            err = dynamodbattribute.UnmarshalMap(element, dbItem)
+            if err != nil {
+                errorLogger.Println(err.Error())
+                return nil
+            }
+            payload[dbItem.Packet] = dbItem.Payload
+        }
+        
+        if (len(payload) == packets || tries >= 10) {
+            break
+        }
+        
+        tries++
+        errorLogger.Println("Waiting for packet(s) to arrive!")
+        time.Sleep(500 * time.Millisecond)
+    }
+    if (tries >= 10) {
+        errorLogger.Println("One or more packets did not arrive!")
+        return nil
     }
     /////////////////////////////////////////////////////////////////////////////
     
