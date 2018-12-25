@@ -91,7 +91,7 @@ void loop()
 	}
 	break;
 	case ACTION_TEST: {
-		mySerial.println(Serial.read());
+		// add code here
 	}
 	break;
 	case ACTION_PHOTO: {
@@ -186,6 +186,8 @@ void loop()
 	}
 	break;
 	case ACTION_SUBSCRIBE: {
+		// note: a bug in SIMCOM module prevents a message from being received if we publish a message
+		// AFTER subscribing to a topic. Do not publish between subscribing and unsubscribing.
 		Hologram.mqttSubscribe(CLIENT);
 	}
 	break;
