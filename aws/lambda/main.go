@@ -7,6 +7,7 @@ import (
     "time"
     "bytes"
     "strings"
+    "strconv"
     "encoding/base64"
     "encoding/binary"
 
@@ -18,14 +19,15 @@ var errorLogger = log.New(os.Stderr, "ERROR ", log.Llongfile)
 type IoTEvent struct {
         Client   string `json:"client"`
         Message  string `json:"message"`
-        Type     string `json:"type"`
+        Category string `json:"category"`
         Packet   string `json:"packet"`
         Payload  string `json:"payload"`
 }
 
 type DbItem struct {
-        Packet  int    `json:"packet"`
-        Payload string `json:"payload"`
+        Category int    `json:"category"`    
+        Packet   int    `json:"packet"`
+        Payload  string `json:"payload"`
 }
 
 func main() {
@@ -33,20 +35,27 @@ func main() {
 }
 
 func router(ctx context.Context, event IoTEvent) {
-    if event.Type == "0" {
+    if event.Category == "0" {
         clientSubscribed(event.Payload)
-    } else if event.Type == "1" {
+    } else if event.Category == "1" {
         dbPutPacket(&event)
-    } else if event.Type == "2" {
+    } else if event.Category == "2" {
         processPhotoData(&event)
     } else {
-        errorLogger.Println("Unknown type: " + event.Type)
+        errorLogger.Println("Unknown category: " + event.Category)
     }
 }
 
 func clientSubscribed(payload string) {
     client := strings.Split(payload, "/")[1]
-    errorLogger.Println("Is there a message for client? " + client)
+    category, notification := dbGetNotification(client)
+    
+    decoded, err := base64.StdEncoding.DecodeString(notification)
+    if err != nil {
+        errorLogger.Println("Notification decode error: " + err.Error())
+    } else {
+        iotPushUpdate("c/" + client + "/" + strconv.Itoa(category), decoded)
+    }
 }
 
 func processPhotoData(event *IoTEvent) {

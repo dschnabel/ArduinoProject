@@ -25,8 +25,8 @@ func dbPutPacket(ioTEvent *IoTEvent) {
             "message": {
                 N: aws.String(ioTEvent.Message),
             },
-            "type": {
-                N: aws.String(ioTEvent.Type),
+            "category": {
+                N: aws.String(ioTEvent.Category),
             },
             "packet": {
                 N: aws.String(ioTEvent.Packet),
@@ -120,4 +120,53 @@ func dbGetMessage(ioTEvent *IoTEvent) (map[int]string) {
     /////////////////////////////////////////////////////////////////////////////
     
     return payload
+}
+
+func dbGetNotification(client string) (int, string) {
+    ////////////////// get item //////////////////////////////////////
+    getInput := &dynamodb.BatchGetItemInput{
+        RequestItems: map[string]*dynamodb.KeysAndAttributes{
+            "Webcam": {
+                Keys: []map[string]*dynamodb.AttributeValue{{"id": {N: aws.String(client)}}},
+                ProjectionExpression: aws.String("category, payload"),
+            },
+        },
+    }
+    
+    result, err := db.BatchGetItem(getInput)
+    if err != nil {
+        errorLogger.Println(err.Error())
+        return 0, ""
+    }
+    if (len(result.Responses["Webcam"]) != 1) {
+        return 0, ""
+    }
+    
+    dbItem := new(DbItem)
+    err = dynamodbattribute.UnmarshalMap(result.Responses["Webcam"][0], dbItem)
+    if err != nil {
+        errorLogger.Println(err.Error())
+        return 0, ""
+    }
+    /////////////////////////////////////////////////////////////////////
+    
+    ////////////////// delete item //////////////////////////////////////
+    deleteInput := &dynamodb.BatchWriteItemInput{
+        RequestItems: map[string][]*dynamodb.WriteRequest{
+            "Webcam": []*dynamodb.WriteRequest{
+                &dynamodb.WriteRequest{
+                    DeleteRequest: &dynamodb.DeleteRequest{Key: map[string]*dynamodb.AttributeValue{"id": {N: aws.String(client)}}},
+                },
+            },
+        },
+    }
+    
+    _, err = db.BatchWriteItem(deleteInput)
+        if err != nil {
+        errorLogger.Println(err.Error())
+        return 0, ""
+    }
+    /////////////////////////////////////////////////////////////////////
+    
+    return dbItem.Category, dbItem.Payload
 }

@@ -340,7 +340,7 @@ bool HologramSIMCOM::mqttSubscribe(uint8_t client) {
 
 	if (1) {
 		char cstr[3];
-		utoa(client, cstr, 10); strcat(topic, cstr); strcat(topic, "/#");
+		utoa(client, cstr, 10); strcat(topic, cstr); strcat(topic, "/+");
 	}
 
 	char cmd[30];
