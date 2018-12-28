@@ -46,7 +46,7 @@ public:
     bool mqttSubscribe(uint8_t client);
     bool mqttUnsubscribe(uint8_t client);
     bool mqttIsListening();
-    bool mqttBufferState(byte *state, uint16_t *reportedSize, byte *type, char *buf, byte size, byte *index);
+    bool mqttBufferState(byte *state, uint16_t *reportedSize, char *buf, byte size, byte *index);
 
     int availableMessage(); // checks if server message, returns message length
     String readMessage(); // returns message as String, resets server, resets message buffer

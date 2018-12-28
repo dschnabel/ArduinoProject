@@ -12,6 +12,11 @@ import (
 
 var db = dynamodb.New(session.New(), aws.NewConfig().WithRegion("us-west-2"))
 
+type DbItem struct {
+        Packet   int    `json:"packet"`
+        Payload  string `json:"payload"`
+}
+
 func dbPutPacket(ioTEvent *IoTEvent) {
     input := &dynamodb.PutItemInput{
         TableName: aws.String("Webcam"),
@@ -122,51 +127,52 @@ func dbGetMessage(ioTEvent *IoTEvent) (map[int]string) {
     return payload
 }
 
-func dbGetNotification(client string) (int, string) {
-    ////////////////// get item //////////////////////////////////////
-    getInput := &dynamodb.BatchGetItemInput{
-        RequestItems: map[string]*dynamodb.KeysAndAttributes{
-            "Webcam": {
-                Keys: []map[string]*dynamodb.AttributeValue{{"id": {N: aws.String(client)}}},
-                ProjectionExpression: aws.String("category, payload"),
-            },
-        },
+func dbAddOrUpdateNotification(client string, payload string) {
+    input := &dynamodb.UpdateItemInput{
+        TableName: aws.String("Webcam"),
+        ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{":p": {S: aws.String(payload)}},
+        Key: map[string]*dynamodb.AttributeValue{"id": {N: aws.String(client)}},
+        ReturnValues: aws.String("ALL_NEW"),
+        UpdateExpression: aws.String("SET payload = :p"),
     }
     
-    result, err := db.BatchGetItem(getInput)
+    _, err := db.UpdateItem(input)
     if err != nil {
         errorLogger.Println(err.Error())
-        return 0, ""
     }
-    if (len(result.Responses["Webcam"]) != 1) {
-        return 0, ""
+}
+
+func dbGetNotification(client string) string {
+    result, err := db.GetItem(&dynamodb.GetItemInput{
+        TableName: aws.String("Webcam"),
+        Key: map[string]*dynamodb.AttributeValue{"id": {N: aws.String(client)}},
+        ProjectionExpression: aws.String("payload"),
+    })
+    
+    if err != nil {
+        errorLogger.Println(err.Error())
+        return ""
     }
     
     dbItem := new(DbItem)
-    err = dynamodbattribute.UnmarshalMap(result.Responses["Webcam"][0], dbItem)
+    err = dynamodbattribute.UnmarshalMap(result.Item, dbItem)
     if err != nil {
         errorLogger.Println(err.Error())
-        return 0, ""
-    }
-    /////////////////////////////////////////////////////////////////////
-    
-    ////////////////// delete item //////////////////////////////////////
-    deleteInput := &dynamodb.BatchWriteItemInput{
-        RequestItems: map[string][]*dynamodb.WriteRequest{
-            "Webcam": []*dynamodb.WriteRequest{
-                &dynamodb.WriteRequest{
-                    DeleteRequest: &dynamodb.DeleteRequest{Key: map[string]*dynamodb.AttributeValue{"id": {N: aws.String(client)}}},
-                },
-            },
-        },
+        return ""
     }
     
-    _, err = db.BatchWriteItem(deleteInput)
-        if err != nil {
+    return dbItem.Payload
+}
+
+func dbDelNotification(client string) {
+    input := &dynamodb.DeleteItemInput{
+        TableName: aws.String("Webcam"),
+        Key: map[string]*dynamodb.AttributeValue{"id": {N: aws.String(client)}},
+    }
+
+    _, err := db.DeleteItem(input)
+    if err != nil {
         errorLogger.Println(err.Error())
-        return 0, ""
+        return
     }
-    /////////////////////////////////////////////////////////////////////
-    
-    return dbItem.Category, dbItem.Payload
 }

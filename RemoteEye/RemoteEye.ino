@@ -10,11 +10,14 @@ SoftwareSerial mySerial(TX_PIN,RX_PIN);
 
 HologramSIMCOM Hologram(&mySerial);
 
-byte mqttResponseType = 0;
 uint16_t mqttReportedTextSize = 0;
 char mqttResponseString[100]; // TODO adjust size as needed (e.g. max struct size)
 byte r_index = 0;
 byte state = 0;
+
+typedef struct {
+	time_t timestamps[5];
+} configuration;
 
 #define CLIENT 0
 
@@ -198,13 +201,18 @@ void loop()
 	}
 
 	if (Hologram.mqttIsListening()) {
-		bool done = Hologram.mqttBufferState(&state, &mqttReportedTextSize, &mqttResponseType,
+		bool done = Hologram.mqttBufferState(&state, &mqttReportedTextSize,
 				mqttResponseString, sizeof(mqttResponseString), &r_index);
 
 		if (done) {
-			mySerial.println(mqttResponseType);
-			mySerial.println(mqttResponseString);
-			mqttResponseType = 0;
+			configuration c;
+			memset(&c, 0, sizeof(configuration));
+			memcpy(&c, mqttResponseString, sizeof(configuration));
+			mySerial.println(c.timestamps[0]);
+			mySerial.println(c.timestamps[1]);
+			mySerial.println(c.timestamps[2]);
+			mySerial.println(c.timestamps[3]);
+			mySerial.println(c.timestamps[4]);
 			memset(mqttResponseString, 0, sizeof(mqttResponseString));
 		}
 	}

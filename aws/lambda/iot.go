@@ -22,7 +22,7 @@ func iotPushUpdate(topic string, payload []byte) bool {
     _, err := iot.Publish(input)
     if err != nil {
         errorLogger.Println(err.Error())
-        return true
+        return false
     }
     
     return true

@@ -175,10 +175,10 @@ int HologramSIMCOM::cellStrength() {
 
 bool HologramSIMCOM::mqttConnect() {
     // network registration & MQTT service start
-    int timeout = 30000;
+    int tries = 4;
     byte mode = UMTS_3G;
     bool registered = true;
-    while((!registered || _writeCommand(F("AT+CMQTTSTART\r\n"), 5, F("+CMQTTSTART: 0"), F("ERROR")) != 2) && timeout > 0) {
+    while((!registered || _writeCommand(F("AT+CMQTTSTART\r\n"), 5, F("+CMQTTSTART: 0"), F("ERROR")) != 2) && tries > 0) {
     	if (!_registerNetwork(mode)) {
     		registered = false;
     	} else {
@@ -191,9 +191,9 @@ bool HologramSIMCOM::mqttConnect() {
     		mode = UMTS_3G;
     	}
 
-    	timeout -= 2000;
+    	tries--;
     }
-    if (timeout <= 0) {
+    if (tries <= 0) {
         mySerial->println(F("ERROR: mqttConnect() failed, could not establish connection"));
         return false;
     }
@@ -340,7 +340,7 @@ bool HologramSIMCOM::mqttSubscribe(uint8_t client) {
 
 	if (1) {
 		char cstr[3];
-		utoa(client, cstr, 10); strcat(topic, cstr); strcat(topic, "/+");
+		utoa(client, cstr, 10); strcat(topic, cstr);
 	}
 
 	char cmd[30];
@@ -377,7 +377,7 @@ bool HologramSIMCOM::mqttUnsubscribe(uint8_t client) {
 
 	if (1) {
 		char cstr[3];
-		utoa(client, cstr, 10); strcat(topic, cstr); strcat(topic, "/#");
+		utoa(client, cstr, 10); strcat(topic, cstr);
 	}
 
 	char cmd[30];
@@ -411,34 +411,19 @@ bool HologramSIMCOM::mqttIsListening() {
 	return _LISTENING;
 }
 
-bool HologramSIMCOM::mqttBufferState(byte *state, uint16_t *reportedSize, byte *type, char *buf, byte size, byte *index) {
+bool HologramSIMCOM::mqttBufferState(byte *state, uint16_t *reportedSize, char *buf, byte size, byte *index) {
 	bool done = false;
 	char c;
 	if ((c = Serial.read()) != -1) {
 //		mySerial->print(c);
-		if (*state < 5) {
-			if (*state == 0) {if (c == 'T') *state = 1; else *state = 0;}
-			else if (*state == 1) {if (c == 'O') *state = 2; else *state = 0;}
-			else if (*state == 2) {if (c == 'P') *state = 3; else *state = 0;}
-			else if (*state == 3) {if (c == 'I') *state = 4; else *state = 0;}
-			else if (*state == 4) {if (c == 'C') *state = 5; else *state = 0;}
-		} else if (*state == 5 && c == '\n') {
-			// proceed to new line for topic
-			*state = 6;
-		} else if (*state == 6) {
-			// save topic to buffer
-			if (c != '\n' && c != '\r') {
-				buf[*index] = c;
-				*index += 1;
-			} else if (c == '\n') {
-				// extract last section of topic which is our type
-				*state = 7;
-				char *p = strrchr(buf, '/');
-				if (p) *type = atol(p + 1);
-				else *type = 0;
-				memset(buf, 0, *index);
-				*index = 0;
-			}
+		if (*state < 7) {
+			if (*state == 0) {if (c == 'P') *state = 1; else *state = 0;}
+			else if (*state == 1) {if (c == 'A') *state = 2; else *state = 0;}
+			else if (*state == 2) {if (c == 'Y') *state = 3; else *state = 0;}
+			else if (*state == 3) {if (c == 'L') *state = 4; else *state = 0;}
+			else if (*state == 4) {if (c == 'O') *state = 5; else *state = 0;}
+			else if (*state == 5) {if (c == 'A') *state = 6; else *state = 0;}
+			else if (*state == 6) {if (c == 'D') *state = 7; else *state = 0;}
 		} else if (*state == 7 && c == ',') {
 			// proceed until we reach a comma
 			*state = 8;
