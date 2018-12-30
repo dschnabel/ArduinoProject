@@ -637,12 +637,15 @@ bool HologramSIMCOM::_registerNetwork(byte mode) {
 	_writeCommand(F("AT+CREG?\r\n"), 1, F("OK"), F("ERROR"));
 	_writeCommand(F("AT+CEREG?\r\n"), 1, F("OK"), F("ERROR"));
 
+	// force deregister
+	_writeCommand(F("AT+COPS=2\r\n"), 1, F("OK"), F("ERROR"));
+
 	if (mode == UMTS_3G) {
-		if(_writeCommand(F("AT+COPS=1,2,\"302720\",2\r\n"), 30, F("OK"), F("+CME ERROR")) == 2) {
+		if(_writeCommand(F("AT+COPS=4,2,\"302720\",2\r\n"), 60, F("OK"), F("+CME ERROR")) == 2) {
 			return true;
 		}
 	} else if (mode == LTE_4G) {
-		if(_writeCommand(F("AT+COPS=1,2,\"302720\",7\r\n"), 30, F("OK"), F("+CME ERROR")) == 2) {
+		if(_writeCommand(F("AT+COPS=4,2,\"302720\",7\r\n"), 60, F("OK"), F("+CME ERROR")) == 2) {
 			return true;
 		}
 	}

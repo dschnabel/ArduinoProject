@@ -173,12 +173,11 @@ func getConfiguration(client string) *Configuration {
         updateConfiguration(client, &config)
     }
     
+    sort.Ints(config.SnapshotTimestamps)
     return &config
 }
 
 func updateConfiguration(client string, config *Configuration) {
-    sort.Ints(config.SnapshotTimestamps)
-    
     var buffer bytes.Buffer
     enc := gob.NewEncoder(&buffer)
     err := enc.Encode(config)
