@@ -175,7 +175,7 @@ int HologramSIMCOM::cellStrength() {
 
 bool HologramSIMCOM::mqttConnect() {
     // network registration & MQTT service start
-    int tries = 4;
+    int tries = 5;
     byte mode = UMTS_3G;
     bool registered = true;
     while((!registered || _writeCommand(F("AT+CMQTTSTART\r\n"), 5, F("+CMQTTSTART: 0"), F("ERROR")) != 2) && tries > 0) {
@@ -641,11 +641,13 @@ bool HologramSIMCOM::_registerNetwork(byte mode) {
 	_writeCommand(F("AT+COPS=2\r\n"), 1, F("OK"), F("ERROR"));
 
 	if (mode == UMTS_3G) {
-		if(_writeCommand(F("AT+COPS=4,2,\"302720\",2\r\n"), 60, F("OK"), F("+CME ERROR")) == 2) {
+		if(_writeCommand(F("AT+COPS=1,2,\"302720\",2\r\n"), 60, F("OK"), F("+CME ERROR")) == 2) {
+			delay(3000);
 			return true;
 		}
 	} else if (mode == LTE_4G) {
-		if(_writeCommand(F("AT+COPS=4,2,\"302720\",7\r\n"), 60, F("OK"), F("+CME ERROR")) == 2) {
+		if(_writeCommand(F("AT+COPS=1,2,\"302720\",7\r\n"), 60, F("OK"), F("+CME ERROR")) == 2) {
+			delay(3000);
 			return true;
 		}
 	}
