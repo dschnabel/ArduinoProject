@@ -51,7 +51,8 @@ public:
     int availableMessage(); // checks if server message, returns message length
     String readMessage(); // returns message as String, resets server, resets message buffer
 
-    time_t getTimestamp();
+    time_t updateTime();
+    bool isOn();
 
 private:
     // Globals ------------------------------------------------------------

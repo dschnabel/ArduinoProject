@@ -19,7 +19,7 @@ PUBLIC
 bool HologramSIMCOM::begin(const uint32_t baud) {
     _initSerial(baud);
     int timeout = 30000;
-    while(_writeCommand(F("AT\r\n"), 1, F("OK"), F("ERROR")) != 2 && timeout > 0) {
+    while(!isOn() && timeout > 0) {
     	_stopSerial();
     	delay(2000);
     	_initSerial(baud);
@@ -174,7 +174,12 @@ int HologramSIMCOM::cellStrength() {
 }
 
 bool HologramSIMCOM::mqttConnect() {
-    // network registration & MQTT service start
+	if (_writeCommand(F("AT+CMQTTCONNECT?\r\n"), 1, F("+CMQTTCONNECT: 0,"), F("ERROR")) == 2) {
+		mySerial->println(F("already connected"));
+		return true;
+	}
+
+	// network registration & MQTT service start
     int tries = 5;
     byte mode = UMTS_3G;
     bool registered = true;
@@ -315,7 +320,7 @@ int16_t HologramSIMCOM::mqttAppendPayload(const byte *payload, uint32_t len) {
 
 bool HologramSIMCOM::mqttPublish() {
 	// workaround: need to block here until we're ready to send
-	_writeCommand(F("AT\r\n"), 1, F("OK"), F("ERROR"));
+	isOn();
 
 	// publish message
 	if(_writeCommand(F("AT+CMQTTPUB=0,0,60\r\n"), 60, F("+CMQTTPUB: 0,0"), F("ERROR")) != 2) {
@@ -362,7 +367,7 @@ bool HologramSIMCOM::mqttSubscribe(uint8_t client) {
 
     if(_writeCommand(F("\r\n"), 60, F("+CMQTTSUB: 0,0"), F("ERROR")) != 2) {
         mySerial->println(F("ERROR: failed to subscribe"));
-        return -1;
+        return false;
     }
 
     _LISTENING = true;
@@ -383,6 +388,8 @@ bool HologramSIMCOM::mqttUnsubscribe(uint8_t client) {
 	char cmd[30];
 	memset(cmd, 0, sizeof(cmd));
 
+	_LISTENING = false;
+
 	if (1) {
 		char cstr[4];
 		utoa(strlen(topic), cstr, 10);
@@ -399,10 +406,8 @@ bool HologramSIMCOM::mqttUnsubscribe(uint8_t client) {
 
     if(_writeCommand(F("\r\n"), 60, F("+CMQTTUNSUB: 0,0"), F("ERROR")) != 2) {
         mySerial->println(F("ERROR: failed to unsubscribe"));
-        return -1;
+        return false;
     }
-
-    _LISTENING = false;
 
 	return true;
 }
@@ -477,7 +482,7 @@ String HologramSIMCOM::readMessage() {
     return returnMessage;
 }
 
-time_t HologramSIMCOM::getTimestamp() {
+time_t HologramSIMCOM::updateTime() {
 	if (_writeCommand(F("AT+CCLK?\r\n"), 2, F("+CCLK:"), F("ERROR")) != 2) {
 		mySerial->println(F("ERROR: Could not get time"));
 		return 0;
@@ -487,10 +492,14 @@ time_t HologramSIMCOM::getTimestamp() {
 		String time = _SERIALBUFFER.substring(_SERIALBUFFER.indexOf(": ")+3).substring(0, 20);
 		setTime(time.substring(9,11).toInt(), time.substring(12,14).toInt(), time.substring(15,17).toInt(),
 				time.substring(6,8).toInt(), time.substring(3,5).toInt(), time.substring(0,2).toInt());
-		adjustTime((time.substring(17,20).toInt() / 4) * 60 * 60);
+		setTimeZoneAdjustment((time.substring(17,20).toInt() / 4) * 60 * 60);
 	}
 
 	return now();
+}
+
+bool HologramSIMCOM::isOn() {
+	return (_writeCommand(F("AT\r\n"), 1, F("OK"), F("ERROR")) == 2);
 }
 
 /*--------------------------------------------------------

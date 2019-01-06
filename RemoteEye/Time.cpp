@@ -237,6 +237,7 @@ time_t makeTime(const tmElements_t &tm){
 static uint32_t sysTime = 0;
 static uint32_t prevMillis = 0;
 static uint32_t nextSyncTime = 0;
+static uint32_t timezoneAdjustment = 0;
 static timeStatus_t Status = timeNotSet;
 
 getExternalTime getTimePtr;  // pointer to external sync function
@@ -271,6 +272,10 @@ time_t now() {
   return (time_t)sysTime;
 }
 
+time_t nowAtCurrentTimezone() {
+	return now() + timezoneAdjustment;
+}
+
 void setTime(time_t t) {
 #ifdef TIME_DRIFT_INFO
  if(sysUnsyncedTime == 0)
@@ -297,6 +302,10 @@ void setTime(int hr,int min,int sec,int dy, int mnth, int yr){
   tm.Minute = min;
   tm.Second = sec;
   setTime(makeTime(tm));
+}
+
+void setTimeZoneAdjustment(long adjustment) {
+	timezoneAdjustment = adjustment;
 }
 
 void adjustTime(long adjustment) {

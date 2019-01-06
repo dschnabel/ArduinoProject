@@ -1,4 +1,5 @@
 #include "Arduino.h"
+#include <avr/wdt.h>
 #include <ArduCAM.h>
 #include "cam.h"
 #include "HologramSIMCOM.h"
@@ -14,11 +15,6 @@ SoftwareSerial mySerial(TX_PIN,RX_PIN);
 
 HologramSIMCOM Hologram(&mySerial);
 configuration config;
-
-uint16_t mqttReportedTextSize = 0;
-char mqttResponseString[sizeof(configuration) + 1];
-byte r_index = 0;
-byte state = 0;
 
 #define CLIENT 0
 #define SIM_SWITCH 9
@@ -58,12 +54,17 @@ byte _get_code() {
 	return 0;
 }
 
-void _action_sim_on() {
-	mySerial.println(F("SIM ON"));
-	digitalWrite(SIM_SWITCH, HIGH);
+bool _action_sim_on() {
+	if (!Hologram.isOn()) {
+		digitalWrite(SIM_SWITCH, LOW);
+		delay(50);
 
-	if (!Hologram.begin(57600)) {
-		return;
+		mySerial.println(F("SIM ON"));
+		digitalWrite(SIM_SWITCH, HIGH);
+
+		if (!Hologram.begin(57600)) {
+			return false;
+		}
 	}
 
 	switch (Hologram.cellStrength()) {
@@ -74,14 +75,8 @@ void _action_sim_on() {
 	case 4: mySerial.println(F("Very good signal strength")); break;
 	case 5: mySerial.println(F("Excellent signal strength"));
 	}
-}
 
-void _action_mqtt_connect() {
-	Hologram.mqttConnect();
-}
-
-void _action_mqtt_disconnect() {
-	Hologram.mqttDisconnect();
+	return true;
 }
 
 void _action_sim_off() {
@@ -89,12 +84,20 @@ void _action_sim_off() {
 	digitalWrite(SIM_SWITCH, LOW);
 }
 
+bool _action_mqtt_connect() {
+	return Hologram.mqttConnect();
+}
+
+void _action_mqtt_disconnect() {
+	Hologram.mqttDisconnect();
+}
+
 void _action_take_photo() {
 	camera_capture_photo();
 	byte messageNr = 0, packetNr = 0;
 
 	// get UNIX timestamp
-	time_t timestamp = Hologram.getTimestamp();
+	time_t timestamp = nowAtCurrentTimezone();
 
 	// put as many variables as possible in new context to prevent stack from being exhausted too soon
 	if (1) {
@@ -180,25 +183,84 @@ void _action_take_photo() {
 	camera_set_capture_done();
 }
 
-void _action_mqtt_subscribe() {
+bool _action_mqtt_subscribe() {
 	// note: a bug in SIMCOM module prevents a message from being received if we publish a message
 	// AFTER subscribing to a topic. Do not publish between subscribing and unsubscribing.
-	Hologram.mqttSubscribe(CLIENT);
+	return Hologram.mqttSubscribe(CLIENT);
 }
 
 void _action_mqtt_unsubscribe() {
 	Hologram.mqttUnsubscribe(CLIENT);
 }
 
-void _action_update_config() {
-	bool done = Hologram.mqttBufferState(&state, &mqttReportedTextSize,
-			mqttResponseString, sizeof(mqttResponseString), &r_index);
+bool _action_update_config(byte *state, uint16_t *reportedSize, char *responseString,
+		uint8_t responseStringLen, byte *index) {
+
+	bool done = Hologram.mqttBufferState(state, reportedSize,
+			responseString, responseStringLen, index);
 
 	if (done) {
 		memset(&config, 0, sizeof(configuration));
-		memcpy(&config, mqttResponseString, sizeof(configuration));
-		memset(mqttResponseString, 0, sizeof(mqttResponseString));
+		memcpy(&config, responseString, sizeof(configuration));
+		memset(responseString, 0, responseStringLen);
 		mySerial.println(F("update done"));
+	}
+
+	return done;
+}
+
+bool _action_retrieve_config() {
+	uint16_t reportedSize = 0;
+	char responseString[sizeof(configuration) + 1];
+	byte index = 0;
+	byte state = 0;
+	memset(responseString, 0, sizeof(responseString));
+
+	if (!_action_mqtt_subscribe()) {
+		return false;
+	}
+
+	bool ret = true;
+	time_t t = now();
+
+	wdt_enable(WDTO_8S);
+	while (Hologram.mqttIsListening()) {
+		wdt_reset();
+		if (_action_update_config(&state, &reportedSize, responseString, sizeof(responseString), &index)) {
+			_action_mqtt_unsubscribe();
+		}
+		if (now() - t > 10) {
+			mySerial.println(F("no config received in 10 seconds. Giving up."));
+			_action_mqtt_unsubscribe();
+			ret = false;
+		}
+	}
+	wdt_disable();
+
+	return ret;
+}
+
+void _action_led_ok() {
+	pinMode(13, OUTPUT);
+	for (int i = 0; i < 5; i++) {
+		digitalWrite(13, HIGH);
+		delay(100);
+		digitalWrite(13, LOW);
+		delay(70);
+	}
+}
+
+void _action_led_error() {
+	pinMode(13, OUTPUT);
+	for (int i = 0; i < 2; i++) {
+		digitalWrite(13, HIGH);
+		delay(100);
+		digitalWrite(13, LOW);
+		delay(70);
+		digitalWrite(13, HIGH);
+		delay(400);
+		digitalWrite(13, LOW);
+		delay(70);
 	}
 }
 
@@ -236,6 +298,7 @@ void _input_action() {
 		mySerial.println(config.timestamps[2]);
 		mySerial.println(config.timestamps[3]);
 		mySerial.println(config.timestamps[4]);
+		mySerial.print(F("Current time: "));mySerial.print(now());
 		break;
 	}
 }
@@ -251,21 +314,38 @@ void setup() {
 
   Hologram.debug();
 
+  if (!_action_sim_on()) {
+	  _action_sim_off();
+	  _action_led_error();
+	  while (1) delay(1000);
+  }
+
+  if (!_action_mqtt_connect()) {
+	  _action_mqtt_disconnect();
+	  _action_sim_off();
+	  _action_led_error();
+	  while (1) delay(1000);
+  }
+
+  if (!_action_retrieve_config()) {
+	  _action_led_error();
+	  while (1) delay(1000);
+  }
+
+  if (Hologram.updateTime() == 0) {
+	  _action_led_error();
+	  while (1) delay(1000);
+  }
+
+  mySerial.print(F("Free RAM: ")); mySerial.println(freeRam());
+
+  _action_led_ok();
+
   camera_setup(OV2640_160x120);
 //  camera_setup(OV2640_640x480);
-
-  _action_sim_on();
-
-  memset(mqttResponseString, 0, sizeof(mqttResponseString));
-  mySerial.print(F("Free RAM: "));
-  mySerial.println(freeRam());
 }
 
 void loop()
 {
 	_input_action();
-
-	if (Hologram.mqttIsListening()) {
-		_action_update_config();
-	}
 }
