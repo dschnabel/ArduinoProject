@@ -6,7 +6,7 @@
 #include "Time.h"
 
 typedef struct {
-	time_t timestamps[5];
+	time_t timestamp;
 } configuration;
 
 #define TX_PIN 3
@@ -15,6 +15,8 @@ SoftwareSerial mySerial(TX_PIN,RX_PIN);
 
 HologramSIMCOM Hologram(&mySerial);
 configuration config;
+time_t last_config_update = 0;
+bool retry_in_progress = false;
 
 #define CLIENT 0
 #define SIM_SWITCH 9
@@ -181,6 +183,9 @@ void _action_take_photo() {
 	Hologram.mqttPublish(CLIENT, messageNr, 2, packetNr++, (const byte*)&timestamp, sizeof(time_t));
 
 	camera_set_capture_done();
+
+	// give module enough time to send data
+	delay(3000);
 }
 
 bool _action_mqtt_subscribe() {
@@ -237,6 +242,11 @@ bool _action_retrieve_config() {
 	}
 	wdt_disable();
 
+	last_config_update = Hologram.updateTime();
+	if (last_config_update == 0) {
+		ret = false;
+	}
+
 	return ret;
 }
 
@@ -252,7 +262,7 @@ void _action_led_ok() {
 
 void _action_led_error() {
 	pinMode(13, OUTPUT);
-	for (int i = 0; i < 2; i++) {
+	while (1) {
 		digitalWrite(13, HIGH);
 		delay(100);
 		digitalWrite(13, LOW);
@@ -261,6 +271,41 @@ void _action_led_error() {
 		delay(400);
 		digitalWrite(13, LOW);
 		delay(70);
+	}
+}
+
+bool _action_startup_and_connect_sim() {
+	if (!_action_sim_on()) {
+		_action_sim_off();
+		return false;
+	}
+
+	if (!_action_mqtt_connect()) {
+		_action_mqtt_disconnect();
+		_action_sim_off();
+		return false;
+	}
+
+	return true;
+}
+
+void _action_disconnect_and_shutdown_sim() {
+	_action_mqtt_disconnect();
+	_action_sim_off();
+}
+
+bool _action_time_for_photo(time_t now) {
+	if (config.timestamp > 0 && config.timestamp <= now) {
+		config.timestamp = 0;
+		return true;
+	}
+
+	return false;
+}
+
+void _action_retry_later(unsigned int delay_sec) {
+	if (config.timestamp > delay_sec) {
+		config.timestamp = now() + delay_sec;
 	}
 }
 
@@ -293,12 +338,8 @@ void _input_action() {
 		_action_mqtt_unsubscribe();
 		break;
 	case ACTION_PRINT_CONFIG:
-		mySerial.println(config.timestamps[0]);
-		mySerial.println(config.timestamps[1]);
-		mySerial.println(config.timestamps[2]);
-		mySerial.println(config.timestamps[3]);
-		mySerial.println(config.timestamps[4]);
-		mySerial.print(F("Current time: "));mySerial.print(now());
+		mySerial.println(config.timestamp);
+		mySerial.print(F("Current time: "));mySerial.println(now());
 		break;
 	}
 }
@@ -314,15 +355,7 @@ void setup() {
 
   Hologram.debug();
 
-  if (!_action_sim_on()) {
-	  _action_sim_off();
-	  _action_led_error();
-	  while (1) delay(1000);
-  }
-
-  if (!_action_mqtt_connect()) {
-	  _action_mqtt_disconnect();
-	  _action_sim_off();
+  if (!_action_startup_and_connect_sim()) {
 	  _action_led_error();
 	  while (1) delay(1000);
   }
@@ -332,10 +365,7 @@ void setup() {
 	  while (1) delay(1000);
   }
 
-  if (Hologram.updateTime() == 0) {
-	  _action_led_error();
-	  while (1) delay(1000);
-  }
+  _action_disconnect_and_shutdown_sim();
 
   mySerial.print(F("Free RAM: ")); mySerial.println(freeRam());
 
@@ -345,7 +375,41 @@ void setup() {
 //  camera_setup(OV2640_640x480);
 }
 
-void loop()
-{
+void loop() {
+
+	time_t n = now();
+
+	if (_action_time_for_photo(n)) {
+		if (_action_startup_and_connect_sim()) {
+			retry_in_progress = false;
+			_action_retrieve_config();
+			_action_take_photo();
+			_action_disconnect_and_shutdown_sim();
+		} else {
+			retry_in_progress = true;
+			_action_retry_later(300); // retry in 5 min
+			mySerial.println(F("Could not startup/connect SIM. No photo taken."));
+		}
+
+//		mySerial.print(F("Photo time: "));mySerial.println(now());
+	}
+
+	// make sure we get settings at least once a day (24h = 86400s)
+	if (!retry_in_progress && n > last_config_update + 86400) {
+		if (_action_startup_and_connect_sim()) {
+			if (!_action_retrieve_config()) {
+				last_config_update += 300; // retry in 5 min
+				mySerial.println(F("Could not update config."));
+			}
+			_action_disconnect_and_shutdown_sim();
+		} else {
+			last_config_update += 300; // retry in 5 min
+			mySerial.println(F("Could not startup/connect SIM. Config not updated."));
+		}
+
+//		mySerial.print(F("Config update time: "));mySerial.println(now());
+	}
+
 	_input_action();
+	delay(1000);
 }

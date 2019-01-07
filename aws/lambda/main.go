@@ -66,9 +66,8 @@ func clientSubscribed(payload string) {
     }
     
     var buffer bytes.Buffer
-    for _, ts := range config.SnapshotTimestamps {
-        binary.Write(&buffer, binary.LittleEndian, int32(ts))
-    }
+    // write next timestamp only and push to client
+    binary.Write(&buffer, binary.LittleEndian, int32(config.SnapshotTimestamps[0]))
     
     iotPushUpdate("c/" + client, buffer.Bytes())
 }

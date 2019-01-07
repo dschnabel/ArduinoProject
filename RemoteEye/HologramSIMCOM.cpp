@@ -648,6 +648,7 @@ bool HologramSIMCOM::_registerNetwork(byte mode) {
 
 	// force deregister
 	_writeCommand(F("AT+COPS=2\r\n"), 1, F("OK"), F("ERROR"));
+	delay(3);
 
 	if (mode == UMTS_3G) {
 		if(_writeCommand(F("AT+COPS=1,2,\"302720\",2\r\n"), 60, F("OK"), F("+CME ERROR")) == 2) {
