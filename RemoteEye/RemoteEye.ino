@@ -4,6 +4,7 @@
 #include "cam.h"
 #include "HologramSIMCOM.h"
 #include "Time.h"
+#include "LowPower.h"
 
 typedef struct {
 	time_t timestamp;
@@ -17,6 +18,7 @@ HologramSIMCOM Hologram(&mySerial);
 configuration config;
 time_t last_config_update = 0;
 bool retry_in_progress = false;
+byte loop_count = 0;
 
 #define CLIENT 0
 #define SIM_SWITCH 9
@@ -376,40 +378,49 @@ void setup() {
 }
 
 void loop() {
+//	_input_action();
 
-	time_t n = now();
+	//-------- sleep here to save energy -----------
+//	delay(8000);
+	LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
+	adjustTime(8);
+	//----------------------------------------------
 
-	if (_action_time_for_photo(n)) {
-		if (_action_startup_and_connect_sim()) {
-			retry_in_progress = false;
-			_action_retrieve_config();
-			_action_take_photo();
-			_action_disconnect_and_shutdown_sim();
-		} else {
-			retry_in_progress = true;
-			_action_retry_later(300); // retry in 5 min
-			mySerial.println(F("Could not startup/connect SIM. No photo taken."));
-		}
+	// only check every 32 seconds
+	if (loop_count++ >= 3) {
+		loop_count = 0;
 
-//		mySerial.print(F("Photo time: "));mySerial.println(now());
-	}
+		time_t n = now();
 
-	// make sure we get settings at least once a day (24h = 86400s)
-	if (!retry_in_progress && n > last_config_update + 86400) {
-		if (_action_startup_and_connect_sim()) {
-			if (!_action_retrieve_config()) {
-				last_config_update += 300; // retry in 5 min
-				mySerial.println(F("Could not update config."));
+		if (_action_time_for_photo(n)) {
+			if (_action_startup_and_connect_sim()) {
+				retry_in_progress = false;
+				_action_retrieve_config();
+				_action_take_photo();
+				_action_disconnect_and_shutdown_sim();
+			} else {
+				retry_in_progress = true;
+				_action_retry_later(300); // retry in 5 min
+				mySerial.println(F("Could not startup/connect SIM. No photo taken."));
 			}
-			_action_disconnect_and_shutdown_sim();
-		} else {
-			last_config_update += 300; // retry in 5 min
-			mySerial.println(F("Could not startup/connect SIM. Config not updated."));
+
+			//mySerial.print(F("Photo time: "));mySerial.println(now());
 		}
 
-//		mySerial.print(F("Config update time: "));mySerial.println(now());
-	}
+		// make sure we get settings at least once a day (24h = 86400s)
+		if (!retry_in_progress && n > last_config_update + 86400) {
+			if (_action_startup_and_connect_sim()) {
+				if (!_action_retrieve_config()) {
+					last_config_update += 300; // retry in 5 min
+					mySerial.println(F("Could not update config."));
+				}
+				_action_disconnect_and_shutdown_sim();
+			} else {
+				last_config_update += 300; // retry in 5 min
+				mySerial.println(F("Could not startup/connect SIM. Config not updated."));
+			}
 
-	_input_action();
-	delay(1000);
+			//mySerial.print(F("Config update time: "));mySerial.println(now());
+		}
+	}
 }
