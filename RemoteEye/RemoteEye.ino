@@ -19,9 +19,12 @@ configuration config;
 time_t last_config_update = 0;
 bool retry_in_progress = false;
 byte loop_count = 0;
+float voltage;
 
 #define CLIENT 0
 #define SIM_SWITCH 9
+#define VOLTAGE_READ_ENABLE_PIN 4
+#define VOLTAGE_READ_PIN A3
 
 #define ACTION_CONNECT 1
 #define ACTION_DISCONNECT 2
@@ -32,6 +35,13 @@ byte loop_count = 0;
 #define ACTION_SIM_ON 7
 #define ACTION_SIM_OFF 8
 #define ACTION_PRINT_CONFIG 9
+#define ACTION_SEND_VOLTAGE 10
+
+#define MSG_TYPE_CLIENT_SUBSCRIBED 0
+#define MSG_TYPE_PHOTO_DATA 1
+#define MSG_TYPE_PHOTO_DONE 2
+#define MSG_TYPE_NEW_CONFIG 3
+#define MSG_TYPE_VOLTAGE 4
 
 int freeRam () {
   extern int __heap_start, *__brkval;
@@ -52,6 +62,7 @@ byte _get_code() {
 		case '9': return ACTION_SIM_ON;
 		case '0': return ACTION_SIM_OFF;
 		case '!': return ACTION_PRINT_CONFIG;
+		case 'v': return ACTION_SEND_VOLTAGE;
 		}
 	}
 
@@ -111,7 +122,7 @@ void _action_take_photo() {
 		int32_t photo_size = camera_get_photo_size()* 0.80;
 		int32_t sent = 0;
 
-		int bufferRemaining = Hologram.mqttInitMessage(CLIENT, messageNr, 1, packetNr++, photo_size);
+		int bufferRemaining = Hologram.mqttInitMessage(CLIENT, messageNr, MSG_TYPE_PHOTO_DATA, packetNr++, photo_size);
 		if (bufferRemaining == -1) return;
 
 		// fetch camera data and send to modem
@@ -133,7 +144,7 @@ void _action_take_photo() {
 				}
 
 				if (!Hologram.mqttPublish()) break;
-				bufferRemaining = Hologram.mqttInitMessage(CLIENT, messageNr, 1, packetNr++, photo_size);
+				bufferRemaining = Hologram.mqttInitMessage(CLIENT, messageNr, MSG_TYPE_PHOTO_DATA, packetNr++, photo_size);
 				if (bufferRemaining == -1) break;
 			}
 
@@ -148,7 +159,7 @@ void _action_take_photo() {
 				if (!Hologram.mqttPublish()) break;
 				photo_size = (camera_get_photo_size() - sent) * 0.5;
 				if (photo_size < len) photo_size = len;
-				bufferRemaining = Hologram.mqttInitMessage(CLIENT, messageNr, 1, packetNr++, photo_size);
+				bufferRemaining = Hologram.mqttInitMessage(CLIENT, messageNr, MSG_TYPE_PHOTO_DATA, packetNr++, photo_size);
 				if (bufferRemaining == -1) break;
 //					mySerial.println(photo_size);
 			}
@@ -182,7 +193,7 @@ void _action_take_photo() {
 	Hologram.mqttPublish();
 
 	// notify done
-	Hologram.mqttPublish(CLIENT, messageNr, 2, packetNr++, (const byte*)&timestamp, sizeof(time_t));
+	Hologram.mqttPublish(CLIENT, messageNr, MSG_TYPE_PHOTO_DONE, packetNr++, (const byte*)&timestamp, sizeof(time_t));
 
 	camera_set_capture_done();
 
@@ -311,6 +322,31 @@ void _action_retry_later(unsigned int delay_sec) {
 	}
 }
 
+void _action_update_voltage() {
+	digitalWrite(VOLTAGE_READ_ENABLE_PIN, HIGH);
+	delay(200);
+
+	long analog = 0;
+
+	// to counter noise, collect a few values and average out
+	for (int i=0;i<100;i++) {
+		analog += analogRead(VOLTAGE_READ_PIN);
+	}
+	analog /= 100;
+
+	digitalWrite(VOLTAGE_READ_ENABLE_PIN, LOW);
+
+	int adjustment = 8; // change to match multimeter value
+	voltage = 0;
+	if (analog > 0) {
+		voltage = ((analog + adjustment) * 3.3 / 1023.0) * (10070+4700) / 4700;
+	}
+}
+
+bool _action_send_voltage() {
+	return Hologram.mqttPublish(CLIENT, 0, MSG_TYPE_VOLTAGE, 0, (const byte*)&voltage, sizeof(float));
+}
+
 void _input_action() {
 	byte code = _get_code();
 	switch (code) {
@@ -343,6 +379,9 @@ void _input_action() {
 		mySerial.println(config.timestamp);
 		mySerial.print(F("Current time: "));mySerial.println(now());
 		break;
+	case ACTION_SEND_VOLTAGE:
+		_action_update_voltage();
+		_action_send_voltage();
 	}
 }
 
@@ -354,10 +393,18 @@ void setup() {
   while(!mySerial);
 
   pinMode(SIM_SWITCH, OUTPUT);
+  pinMode(VOLTAGE_READ_ENABLE_PIN, OUTPUT);
+
+  _action_update_voltage();
 
   Hologram.debug();
 
   if (!_action_startup_and_connect_sim()) {
+	  _action_led_error();
+	  while (1) delay(1000);
+  }
+
+  if (!_action_send_voltage()) {
 	  _action_led_error();
 	  while (1) delay(1000);
   }
@@ -393,8 +440,10 @@ void loop() {
 		time_t n = now();
 
 		if (_action_time_for_photo(n)) {
+			_action_update_voltage();
 			if (_action_startup_and_connect_sim()) {
 				retry_in_progress = false;
+				_action_send_voltage();
 				_action_retrieve_config();
 				_action_take_photo();
 				_action_disconnect_and_shutdown_sim();
@@ -409,7 +458,9 @@ void loop() {
 
 		// make sure we get settings at least once a day (24h = 86400s)
 		if (!retry_in_progress && n > last_config_update + 86400) {
+			_action_update_voltage();
 			if (_action_startup_and_connect_sim()) {
+				_action_send_voltage();
 				if (!_action_retrieve_config()) {
 					last_config_update += 300; // retry in 5 min
 					mySerial.println(F("Could not update config."));
