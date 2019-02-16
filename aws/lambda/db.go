@@ -3,6 +3,7 @@ package main
 import (
     "strconv"
     "time"
+    "fmt"
     
     "github.com/aws/aws-sdk-go/aws"
     "github.com/aws/aws-sdk-go/aws/session"
@@ -17,9 +18,9 @@ type DbItem struct {
         Payload  string `json:"payload"`
 }
 
-func dbPutPacket(ioTEvent *IoTEvent) {
+func dbPutPhotoData(ioTEvent *IoTEvent) {
     input := &dynamodb.PutItemInput{
-        TableName: aws.String("Webcam"),
+        TableName: aws.String("RE_Photo"),
         Item: map[string]*dynamodb.AttributeValue{
             "id": {
                 N: aws.String("1" + ioTEvent.Client + ioTEvent.Message + ioTEvent.Packet),
@@ -48,7 +49,7 @@ func dbPutPacket(ioTEvent *IoTEvent) {
     }
 }
 
-func dbGetMessage(ioTEvent *IoTEvent) (map[int]string) {
+func dbGetPhotoData(ioTEvent *IoTEvent) (map[int]string) {
     packets, err := strconv.Atoi(ioTEvent.Packet)
     if err != nil {
         errorLogger.Println(err.Error())
@@ -66,7 +67,7 @@ func dbGetMessage(ioTEvent *IoTEvent) (map[int]string) {
     for {
         getInput := &dynamodb.BatchGetItemInput{
             RequestItems: map[string]*dynamodb.KeysAndAttributes{
-                "Webcam": {
+                "RE_Photo": {
                     Keys: getAttr,
                     ProjectionExpression: aws.String("packet, payload"),
                 },
@@ -80,7 +81,7 @@ func dbGetMessage(ioTEvent *IoTEvent) (map[int]string) {
         }
         
         payload = make(map[int]string)
-        for _, element := range result.Responses["Webcam"] {
+        for _, element := range result.Responses["RE_Photo"] {
             dbItem := new(DbItem)
             err = dynamodbattribute.UnmarshalMap(element, dbItem)
             if err != nil {
@@ -113,7 +114,7 @@ func dbGetMessage(ioTEvent *IoTEvent) (map[int]string) {
     
     deleteInput := &dynamodb.BatchWriteItemInput{
         RequestItems: map[string][]*dynamodb.WriteRequest{
-            "Webcam": delAttr,
+            "RE_Photo": delAttr,
         },
     }
     
@@ -127,9 +128,9 @@ func dbGetMessage(ioTEvent *IoTEvent) (map[int]string) {
     return payload
 }
 
-func dbAddOrUpdateNotification(client string, payload string) {
+func dbAddOrUpdateConfig(client string, payload string) {
     input := &dynamodb.UpdateItemInput{
-        TableName: aws.String("Webcam"),
+        TableName: aws.String("RE_Config"),
         ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{":p": {S: aws.String(payload)}},
         Key: map[string]*dynamodb.AttributeValue{"id": {N: aws.String(client)}},
         ReturnValues: aws.String("ALL_NEW"),
@@ -142,9 +143,9 @@ func dbAddOrUpdateNotification(client string, payload string) {
     }
 }
 
-func dbGetNotification(client string) string {
+func dbGetConfig(client string) string {
     result, err := db.GetItem(&dynamodb.GetItemInput{
-        TableName: aws.String("Webcam"),
+        TableName: aws.String("RE_Config"),
         Key: map[string]*dynamodb.AttributeValue{"id": {N: aws.String(client)}},
         ProjectionExpression: aws.String("payload"),
     })
@@ -164,15 +165,36 @@ func dbGetNotification(client string) string {
     return dbItem.Payload
 }
 
-func dbDelNotification(client string) {
+func dbDelConfig(client string) {
     input := &dynamodb.DeleteItemInput{
-        TableName: aws.String("Webcam"),
+        TableName: aws.String("RE_Config"),
         Key: map[string]*dynamodb.AttributeValue{"id": {N: aws.String(client)}},
     }
 
     _, err := db.DeleteItem(input)
     if err != nil {
         errorLogger.Println(err.Error())
-        return
+    }
+}
+
+func dbPutVoltage(client string, voltage float32) {
+    input := &dynamodb.PutItemInput{
+        TableName: aws.String("RE_Voltage"),
+        Item: map[string]*dynamodb.AttributeValue{
+            "timestamp": {
+                N: aws.String(strconv.FormatInt(time.Now().Unix(), 10)),
+            },
+            "client": {
+                N: aws.String(client),
+            },
+            "voltage": {
+                N: aws.String(fmt.Sprintf("%.2f", voltage)),
+            },
+        },
+    }
+
+    _, err := db.PutItem(input)
+    if err != nil {
+        errorLogger.Println(err.Error())
     }
 }

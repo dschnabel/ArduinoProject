@@ -12,11 +12,18 @@ import (
     "encoding/base64"
     "encoding/binary"
     "encoding/gob"
+    "math"
 
     "github.com/aws/aws-lambda-go/lambda"
 )
 
 var errorLogger = log.New(os.Stderr, "ERROR ", log.Llongfile)
+
+const MSG_TYPE_CLIENT_SUBSCRIBED = "0"
+const MSG_TYPE_PHOTO_DATA = "1"
+const MSG_TYPE_PHOTO_DONE = "2"
+const MSG_TYPE_NEW_CONFIG = "3"
+const MSG_TYPE_VOLTAGE = "4"
 
 type IoTEvent struct {
     Client   string `json:"client"`
@@ -35,14 +42,16 @@ func main() {
 }
 
 func router(ctx context.Context, event IoTEvent) {
-    if event.Category == "0" {
+    if event.Category == MSG_TYPE_CLIENT_SUBSCRIBED {
         clientSubscribed(event.Payload)
-    } else if event.Category == "1" {
-        dbPutPacket(&event)
-    } else if event.Category == "2" {
+    } else if event.Category == MSG_TYPE_PHOTO_DATA {
+        dbPutPhotoData(&event)
+    } else if event.Category == MSG_TYPE_PHOTO_DONE {
         processPhotoData(&event)
-    } else if event.Category == "3" {
+    } else if event.Category == MSG_TYPE_NEW_CONFIG {
         processNewConfiguration(&event)
+    } else if event.Category == MSG_TYPE_VOLTAGE {
+        addVoltage(&event)
     } else {
         errorLogger.Println("Unknown category: " + event.Category)
     }
@@ -60,7 +69,7 @@ func clientSubscribed(payload string) {
     config := getConfiguration(client)
     
     if len(config.SnapshotTimestamps) == 0 {
-        dbDelNotification(client)
+        dbDelConfig(client)
         iotPushUpdate("c/" + client, []byte{0})
         return
     }
@@ -93,7 +102,7 @@ func processPhotoData(event *IoTEvent) {
 }
 
 func assemblePhotoData(event *IoTEvent) ([]byte) {
-    payload := dbGetMessage(event)
+    payload := dbGetPhotoData(event)
     if payload == nil {
         return nil
     }
@@ -143,7 +152,7 @@ func processNewConfiguration(event *IoTEvent) {
     }
     
     if len(config.SnapshotTimestamps) == 0 {
-        dbDelNotification(event.Client)
+        dbDelConfig(event.Client)
     } else {
         updateConfiguration(event.Client, config)
     }
@@ -152,7 +161,7 @@ func processNewConfiguration(event *IoTEvent) {
 func getConfiguration(client string) *Configuration {
     var config Configuration
     
-    notification := dbGetNotification(client)
+    notification := dbGetConfig(client)
     if (notification != "") {
         decoded, err := base64.StdEncoding.DecodeString(notification)
         if err != nil {
@@ -186,7 +195,7 @@ func updateConfiguration(client string, config *Configuration) {
     }
     
     encoded := base64.StdEncoding.EncodeToString([]byte(buffer.String()))
-    dbAddOrUpdateNotification(client, encoded)
+    dbAddOrUpdateConfig(client, encoded)
 }
 
 func deleteOldTimestamps(config *Configuration) bool {
@@ -231,4 +240,17 @@ func deleteDuplicateTimestamps(config *Configuration) bool {
     config.SnapshotTimestamps = ts
     
     return updated
+}
+
+func addVoltage(event *IoTEvent) {
+    decoded, err := base64.StdEncoding.DecodeString(event.Payload)
+    if err != nil {
+        errorLogger.Println(err.Error())
+        return
+    }
+    
+    bits := binary.LittleEndian.Uint32(decoded)
+    voltage := math.Float32frombits(bits)
+    
+    dbPutVoltage(event.Client, voltage)
 }
