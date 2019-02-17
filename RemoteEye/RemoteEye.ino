@@ -22,7 +22,7 @@ byte loop_count = 0;
 float voltage;
 
 #define CLIENT 0
-#define SIM_SWITCH 9
+#define MODULES_SWITCH 9
 #define VOLTAGE_READ_ENABLE_PIN 4
 #define VOLTAGE_READ_PIN A3
 
@@ -32,8 +32,8 @@ float voltage;
 #define ACTION_TEST 4
 #define ACTION_SUBSCRIBE 5
 #define ACTION_UNSUBSCRIBE 6
-#define ACTION_SIM_ON 7
-#define ACTION_SIM_OFF 8
+#define ACTION_MODULES_ON 7
+#define ACTION_MODULES_OFF 8
 #define ACTION_PRINT_CONFIG 9
 #define ACTION_SEND_VOLTAGE 10
 
@@ -59,8 +59,8 @@ byte _get_code() {
 		case 't': return ACTION_TEST;
 		case 's': return ACTION_SUBSCRIBE;
 		case 'u': return ACTION_UNSUBSCRIBE;
-		case '9': return ACTION_SIM_ON;
-		case '0': return ACTION_SIM_OFF;
+		case '9': return ACTION_MODULES_ON;
+		case '0': return ACTION_MODULES_OFF;
 		case '!': return ACTION_PRINT_CONFIG;
 		case 'v': return ACTION_SEND_VOLTAGE;
 		}
@@ -69,13 +69,16 @@ byte _get_code() {
 	return 0;
 }
 
-bool _action_sim_on() {
+bool _action_modules_on() {
 	if (!Hologram.isOn()) {
-		digitalWrite(SIM_SWITCH, LOW);
+		digitalWrite(MODULES_SWITCH, LOW);
 		delay(50);
 
-		mySerial.println(F("SIM ON"));
-		digitalWrite(SIM_SWITCH, HIGH);
+		mySerial.println(F("MODULES ON"));
+		digitalWrite(MODULES_SWITCH, HIGH);
+
+		camera_setup(OV2640_160x120);
+	//	camera_setup(OV2640_640x480);
 
 		if (!Hologram.begin(57600)) {
 			return false;
@@ -94,9 +97,9 @@ bool _action_sim_on() {
 	return true;
 }
 
-void _action_sim_off() {
-	mySerial.println(F("SIM OFF"));
-	digitalWrite(SIM_SWITCH, LOW);
+void _action_modules_off() {
+	mySerial.println(F("MODULES OFF"));
+	digitalWrite(MODULES_SWITCH, LOW);
 }
 
 bool _action_mqtt_connect() {
@@ -287,24 +290,24 @@ void _action_led_error() {
 	}
 }
 
-bool _action_startup_and_connect_sim() {
-	if (!_action_sim_on()) {
-		_action_sim_off();
+bool _action_startup_and_connect_modules() {
+	if (!_action_modules_on()) {
+		_action_modules_off();
 		return false;
 	}
 
 	if (!_action_mqtt_connect()) {
 		_action_mqtt_disconnect();
-		_action_sim_off();
+		_action_modules_off();
 		return false;
 	}
 
 	return true;
 }
 
-void _action_disconnect_and_shutdown_sim() {
+void _action_disconnect_and_shutdown_modules() {
 	_action_mqtt_disconnect();
-	_action_sim_off();
+	_action_modules_off();
 }
 
 bool _action_time_for_photo(time_t now) {
@@ -354,11 +357,11 @@ void _input_action() {
 		// add code here
 		break;
 	}
-	case ACTION_SIM_ON:
-		_action_sim_on();
+	case ACTION_MODULES_ON:
+		_action_modules_on();
 		break;
-	case ACTION_SIM_OFF:
-		_action_sim_off();
+	case ACTION_MODULES_OFF:
+		_action_modules_off();
 		break;
 	case ACTION_CONNECT:
 		_action_mqtt_connect();
@@ -392,14 +395,14 @@ void setup() {
   mySerial.begin(57600);
   while(!mySerial);
 
-  pinMode(SIM_SWITCH, OUTPUT);
+  pinMode(MODULES_SWITCH, OUTPUT);
   pinMode(VOLTAGE_READ_ENABLE_PIN, OUTPUT);
 
   _action_update_voltage();
 
   Hologram.debug();
 
-  if (!_action_startup_and_connect_sim()) {
+  if (!_action_startup_and_connect_modules()) {
 	  _action_led_error();
 	  while (1) delay(1000);
   }
@@ -414,14 +417,11 @@ void setup() {
 	  while (1) delay(1000);
   }
 
-  _action_disconnect_and_shutdown_sim();
+  _action_disconnect_and_shutdown_modules();
 
   mySerial.print(F("Free RAM: ")); mySerial.println(freeRam());
 
   _action_led_ok();
-
-  camera_setup(OV2640_160x120);
-//  camera_setup(OV2640_640x480);
 }
 
 void loop() {
@@ -441,12 +441,12 @@ void loop() {
 
 		if (_action_time_for_photo(n)) {
 			_action_update_voltage();
-			if (_action_startup_and_connect_sim()) {
+			if (_action_startup_and_connect_modules()) {
 				retry_in_progress = false;
 				_action_send_voltage();
 				_action_retrieve_config();
 				_action_take_photo();
-				_action_disconnect_and_shutdown_sim();
+				_action_disconnect_and_shutdown_modules();
 			} else {
 				retry_in_progress = true;
 				_action_retry_later(300); // retry in 5 min
@@ -459,13 +459,13 @@ void loop() {
 		// make sure we get settings at least once a day (24h = 86400s)
 		if (!retry_in_progress && n > last_config_update + 86400) {
 			_action_update_voltage();
-			if (_action_startup_and_connect_sim()) {
+			if (_action_startup_and_connect_modules()) {
 				_action_send_voltage();
 				if (!_action_retrieve_config()) {
 					last_config_update += 300; // retry in 5 min
 					mySerial.println(F("Could not update config."));
 				}
-				_action_disconnect_and_shutdown_sim();
+				_action_disconnect_and_shutdown_modules();
 			} else {
 				last_config_update += 300; // retry in 5 min
 				mySerial.println(F("Could not startup/connect SIM. Config not updated."));
