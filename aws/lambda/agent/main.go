@@ -74,12 +74,12 @@ func processPhotoData(event *s3.IoTEvent) {
         decoded, err := base64.StdEncoding.DecodeString(event.Payload)
         if err != nil {
             s3.ErrorLogger.Println("Timestamp decode error: " + err.Error())
-            filename += time.Now().Format("2006-01-02-15.04.05") + "_err.jpg"
+            filename += time.Now().Format("2006-01-02T15:04:05MST-0700") + "_err.jpg"
         } else {        
             var unixTime uint32
             buf := bytes.NewBuffer(decoded)
             binary.Read(buf, binary.LittleEndian, &unixTime)
-            filename += time.Unix(int64(unixTime), 0).Format("2006-01-02-15.04.05") + ".jpg"
+            filename += time.Unix(int64(unixTime), 0).Format("2006-01-02T15:04:05MST-0700") + ".jpg"
         }
         
         s3.S3SaveFile(filename, data)
