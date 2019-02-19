@@ -19,6 +19,7 @@ configuration config;
 time_t last_config_update = 0;
 bool retry_in_progress = false;
 byte loop_count = 0;
+byte time_adjust_count = 0;
 float voltage;
 
 #define CLIENT 0
@@ -398,9 +399,9 @@ void setup() {
   pinMode(MODULES_SWITCH, OUTPUT);
   pinMode(VOLTAGE_READ_ENABLE_PIN, OUTPUT);
 
-  _action_update_voltage();
-
   Hologram.debug();
+
+  _action_update_voltage();
 
   if (!_action_startup_and_connect_modules()) {
 	  _action_led_error();
@@ -430,7 +431,13 @@ void loop() {
 	//-------- sleep here to save energy -----------
 //	delay(8000);
 	LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
-	adjustTime(8);
+	if (time_adjust_count++ < 14) {
+		adjustTime(8);
+	} else {
+		time_adjust_count = 0;
+		// we're losing 2 seconds every 2 minutes, so compensate for that
+		adjustTime(10);
+	}
 	//----------------------------------------------
 
 	// only check every 32 seconds
