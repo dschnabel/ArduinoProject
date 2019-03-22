@@ -1,0 +1,2 @@
+go build -o webcam && zip webcam.zip webcam && aws lambda update-function-code --function-name webcam --zip-file fileb://webcam.zip
+go build -o frontend && zip frontend.zip frontend && aws lambda update-function-code --function-name frontend --zip-file fileb://frontend.zip
