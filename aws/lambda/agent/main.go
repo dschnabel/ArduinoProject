@@ -6,14 +6,17 @@ import (
     "bytes"
     "strings"
     "strconv"
-    "sort"
     "encoding/base64"
     "encoding/binary"
-    "encoding/gob"
     "math"
+    "image"
+    "bufio"
+    "image/jpeg"
 
     "github.com/aws/aws-lambda-go/lambda"
+    "github.com/disintegration/imaging"
     "../s3"
+    "../common"
 )
 
 const MSG_TYPE_CLIENT_SUBSCRIBED = "0"
@@ -51,7 +54,7 @@ func clientSubscribed(payload string) {
         return
     }
     
-    config := getConfiguration(client)
+     config := common.GetConfiguration(client)
     
     if len(config.SnapshotTimestamps) == 0 {
         s3.DbDelConfig(client)
@@ -83,6 +86,20 @@ func processPhotoData(event *s3.IoTEvent) {
         }
         
         s3.S3SaveFile(filename, data)
+        
+        // create thumbnail
+        srcImg, _, err := image.Decode(bytes.NewReader(data))
+        if err != nil {
+            s3.ErrorLogger.Println("Image decode error: " + err.Error())
+        }
+        dstImg := imaging.Resize(srcImg, 45, 0, imaging.Lanczos)
+        
+        var b bytes.Buffer
+        writer := bufio.NewWriter(&b)
+        jpeg.Encode(writer, dstImg, &jpeg.Options{jpeg.DefaultQuality})
+        writer.Flush()
+        
+        s3.S3SaveFile("thumbnails/" + filename, []byte(b.String()))
     }
 }
 
@@ -112,7 +129,7 @@ func processNewConfiguration(event *s3.IoTEvent) {
         return
     }
     
-    config := getConfiguration(event.Client)
+    config := common.GetConfiguration(event.Client)
     
     timestamps := strings.Split(string(decoded), ",")
     for _, timestamp := range timestamps {
@@ -139,92 +156,8 @@ func processNewConfiguration(event *s3.IoTEvent) {
     if len(config.SnapshotTimestamps) == 0 {
         s3.DbDelConfig(event.Client)
     } else {
-        updateConfiguration(event.Client, config)
+        common.UpdateConfiguration(event.Client, config)
     }
-}
-
-func getConfiguration(client string) *s3.Configuration {
-    var config s3.Configuration
-    
-    configEnc := s3.DbGetConfig(client)
-    if (configEnc != "") {
-        decoded, err := base64.StdEncoding.DecodeString(configEnc)
-        if err != nil {
-            s3.ErrorLogger.Println(err.Error())
-        }
-        
-        buffer := bytes.NewBuffer(decoded)
-        dec := gob.NewDecoder(buffer)
-        
-        err = dec.Decode(&config)
-        if err != nil {
-            s3.ErrorLogger.Println(err.Error())
-        }
-    }
-    
-    if deleteOldTimestamps(&config) || deleteDuplicateTimestamps(&config) {
-        updateConfiguration(client, &config)
-    }
-    
-    sort.Ints(config.SnapshotTimestamps)
-    return &config
-}
-
-func updateConfiguration(client string, config *s3.Configuration) {
-    var buffer bytes.Buffer
-    enc := gob.NewEncoder(&buffer)
-    err := enc.Encode(config)
-    if err != nil {
-        s3.ErrorLogger.Println(err.Error())
-        return
-    }
-    
-    encoded := base64.StdEncoding.EncodeToString([]byte(buffer.String()))
-    s3.DbAddOrUpdateConfig(client, encoded)
-}
-
-func deleteOldTimestamps(config *s3.Configuration) bool {
-    updated := false
-    now := time.Now().Unix()
-    ts := config.SnapshotTimestamps
-    
-    i := 0
-    for _, x := range ts {
-        if x > int(now) {
-            ts[i] = x
-            i++
-        } else {
-            updated = true
-        }
-    }
-    
-    if updated {
-        config.SnapshotTimestamps = ts[:i]
-    }
-    
-    return updated
-}
-
-func deleteDuplicateTimestamps(config *s3.Configuration) bool {
-    updated := false
-    m := make(map[int]bool)
-    
-    for _, x := range config.SnapshotTimestamps {
-        if _, ok := m[x]; ok {
-            updated = true
-        } else {
-            m[x] = true
-        }
-    }
-    
-    var ts []int
-    for x, _ := range m {
-        ts = append(ts, x)
-    }
-    
-    config.SnapshotTimestamps = ts
-    
-    return updated
 }
 
 func addVoltage(event *s3.IoTEvent) {

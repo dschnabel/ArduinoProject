@@ -174,7 +174,6 @@
 					// custom hack
 					var formatted = lastSelected.format(settings.dateFormat);
 					timeline.add({start: new Date(formatted).getTime(), title: formatted, className: 'new', editable: true});
-					document.getElementById('date').innerHTML += new Date(formatted).getTime()/1000 + ',';
 					document.getElementById('saveButton').disabled = false;
                 }
 

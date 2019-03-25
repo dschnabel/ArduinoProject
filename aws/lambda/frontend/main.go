@@ -1,17 +1,16 @@
 package main
 
 import (
-    "encoding/base64"
-    "encoding/gob"
-     "encoding/json"
-    "bytes"
+    "encoding/json"
     "net/http"
     "strings"
     "time"
+    "strconv"
 
     "github.com/aws/aws-lambda-go/events"
     "github.com/aws/aws-lambda-go/lambda"
     "../s3"
+    "../common"
 )
 
 func main() {
@@ -22,8 +21,8 @@ func router(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, 
     switch req.HTTPMethod {
     case "GET":
         return show(req)
-    //case "POST":
-        //return create(req)
+    case "POST":
+        return create(req)
     default:
         return clientError(http.StatusMethodNotAllowed)
     }
@@ -46,29 +45,13 @@ func clientError(status int) (events.APIGatewayProxyResponse, error) {
 }
 
 func show(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-    var config s3.Configuration
     type timelineItem struct {
         Start int           `json:"start"`
         Link  string        `json:"link"`
     }
     var timeline []timelineItem
-    
-    // config
-    configEnc := s3.DbGetConfig("0")
-    if (configEnc != "") {
-        decoded, err := base64.StdEncoding.DecodeString(configEnc)
-        if err != nil {
-            s3.ErrorLogger.Println(err.Error())
-        }
-        
-        buffer := bytes.NewBuffer(decoded)
-        dec := gob.NewDecoder(buffer)
-        
-        err = dec.Decode(&config)
-        if err != nil {
-            s3.ErrorLogger.Println(err.Error())
-        }
-    }
+
+    config := common.GetConfiguration("0")
 
     for _, ts := range config.SnapshotTimestamps {
         timeline = append(timeline, timelineItem{Start: ts * 1000})
@@ -99,5 +82,31 @@ func show(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, er
         Headers:    map[string]string{"Access-Control-Allow-Origin": "*"},
         StatusCode: http.StatusOK,
         Body:       string(json),
+    }, nil
+}
+
+func create(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {   
+    var config s3.Configuration
+    
+    timestamps := strings.Split(string(req.Body), ",")
+    for _, timestamp := range timestamps {
+        ts, err := strconv.Atoi(timestamp)
+        if err != nil {
+            s3.ErrorLogger.Println(err.Error())
+        } else {
+            config.SnapshotTimestamps = append(config.SnapshotTimestamps, ts)
+        }
+    }
+    
+    if len(config.SnapshotTimestamps) == 0 {
+        s3.DbDelConfig("0")
+    } else {
+        common.UpdateConfiguration("0", &config)
+    }
+    
+    return events.APIGatewayProxyResponse{
+        Headers:    map[string]string{"Access-Control-Allow-Origin": "*"},
+        StatusCode: 201,
+        Body:       "{\"status\": \"OK\"}",
     }, nil
 }

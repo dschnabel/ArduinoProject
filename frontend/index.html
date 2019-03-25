@@ -14,6 +14,8 @@
 	<script src="url.js"></script>
 
     <script type="text/javascript">
+		var timeline;
+		
 		function loadPhoto(photo, title) {
 			var photoDiv = document.getElementById('photo');
 			var img = document.createElement('img');
@@ -51,7 +53,7 @@
 				  var container = document.getElementById('visualization');
 				  var items = new vis.DataSet(data);
 				  var options = {type: 'point'};
-				  var timeline = new vis.Timeline(container, items, options);
+				  timeline = new vis.Timeline(container, items, options);
 				  var now = Date.now();
 				  
 				  timeline.setWindow(now-1000000000, now+1000000000);
@@ -76,6 +78,31 @@
 				}
 			});
 		})
+		
+		function updateConfig() {
+			var timestamps = "";
+			for (var itemId in timeline.itemSet.items) {
+				var item = timeline.itemSet.items[itemId];
+				if (item.editable.remove) {
+					timestamps += item.data.start.getTime()/1000 + ",";
+				}
+			}
+			timestamps = timestamps.slice(0, -1);
+			
+			$.ajax({
+			  type:    "POST",
+			  url:     api,
+			  data:    timestamps,
+			  success: function(data) {
+					document.getElementById('saveButton').disabled = true;
+			  },
+			  error: function(jqXHR, textStatus, errorThrown) {
+					alert("Error, status = " + textStatus + ", " +
+						  "error thrown: " + errorThrown
+					);
+			  }
+			});
+		}
     </script>
 	
 	<style type="text/css">
@@ -104,8 +131,7 @@
 		<div id="picker"> </div>
 		<input type="hidden" id="result" value="" />
 	</div>
-	<p><div style="text-align:center"><button id="saveButton" disabled>Save Changes</button></div></p>
-	<p><div id="date" style="text-align:center"></div></p>
+	<p><div style="text-align:center"><button id="saveButton" disabled onclick="updateConfig()">Save Changes</button></div></p>
 
 	<div id="visualization"></div>
 	<div id="loading">loading...</div>
