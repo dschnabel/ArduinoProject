@@ -20,8 +20,6 @@ time_t last_config_update = 0;
 bool retry_in_progress = false;
 byte loop_count = 0;
 byte time_adjust_count = 0;
-byte time_adjust_matrix[] = {6,6,6,7};
-byte time_adjust_matrix_index = 0;
 float voltage;
 
 #define CLIENT 0
@@ -433,12 +431,11 @@ void loop() {
 	//-------- sleep here to save energy -----------
 //	delay(8000);
 	LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
-	if (time_adjust_count++ < time_adjust_matrix[time_adjust_matrix_index]) {
+	if (time_adjust_count++ < 11) {
 		adjustTime(8);
 	} else {
 		time_adjust_count = 0;
-		time_adjust_matrix_index++;
-		time_adjust_matrix_index %= sizeof(time_adjust_matrix);
+
 		// we're losing a second every now and then, so compensate for that
 		adjustTime(9);
 	}

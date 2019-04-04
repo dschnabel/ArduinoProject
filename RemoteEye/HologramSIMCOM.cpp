@@ -180,7 +180,7 @@ bool HologramSIMCOM::mqttConnect() {
 	}
 
 	// network registration & MQTT service start
-    int tries = 5;
+    int tries = 2;
     byte mode = UMTS_3G;
     bool registered = true;
     while((!registered || _writeCommand(F("AT+CMQTTSTART\r\n"), 5, F("+CMQTTSTART: 0"), F("ERROR")) != 2) && tries > 0) {
