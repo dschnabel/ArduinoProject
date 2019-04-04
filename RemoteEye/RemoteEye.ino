@@ -26,6 +26,7 @@ float voltage;
 #define MODULES_SWITCH 9
 #define VOLTAGE_READ_ENABLE_PIN 4
 #define VOLTAGE_READ_PIN A3
+#define LED_PIN 7
 
 #define ACTION_CONNECT 1
 #define ACTION_DISCONNECT 2
@@ -268,25 +269,23 @@ bool _action_retrieve_config() {
 }
 
 void _action_led_ok() {
-	pinMode(13, OUTPUT);
 	for (int i = 0; i < 5; i++) {
-		digitalWrite(13, HIGH);
+		digitalWrite(LED_PIN, HIGH);
 		delay(100);
-		digitalWrite(13, LOW);
+		digitalWrite(LED_PIN, LOW);
 		delay(70);
 	}
 }
 
 void _action_led_error() {
-	pinMode(13, OUTPUT);
 	while (1) {
-		digitalWrite(13, HIGH);
+		digitalWrite(LED_PIN, HIGH);
 		delay(100);
-		digitalWrite(13, LOW);
+		digitalWrite(LED_PIN, LOW);
 		delay(70);
-		digitalWrite(13, HIGH);
+		digitalWrite(LED_PIN, HIGH);
 		delay(400);
-		digitalWrite(13, LOW);
+		digitalWrite(LED_PIN, LOW);
 		delay(70);
 	}
 }
@@ -398,6 +397,12 @@ void setup() {
 
   pinMode(MODULES_SWITCH, OUTPUT);
   pinMode(VOLTAGE_READ_ENABLE_PIN, OUTPUT);
+  pinMode(LED_PIN, OUTPUT);
+
+  // sleep a few seconds to allow for flashing
+  digitalWrite(LED_PIN, HIGH);
+  delay(3000);
+  digitalWrite(LED_PIN, LOW);
 
   Hologram.debug();
 
