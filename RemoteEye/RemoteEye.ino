@@ -79,8 +79,8 @@ bool _action_modules_on() {
 		mySerial.println(F("MODULES ON"));
 		digitalWrite(MODULES_SWITCH, HIGH);
 
-		camera_setup(OV2640_160x120);
-	//	camera_setup(OV2640_640x480);
+		//camera_setup(OV2640_160x120);
+		camera_setup(OV2640_640x480);
 
 		if (!Hologram.begin(57600)) {
 			return false;
