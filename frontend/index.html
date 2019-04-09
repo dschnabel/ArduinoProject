@@ -40,7 +40,7 @@
 						data[key].type = "box";
 						thumbnail = data[key].link;
 						link = thumbnail.replace(/thumbnails\//, '');
-						data[key].content = "<img src=\"" + s3Url + thumbnail+"\" onclick=\"javascript:loadPhoto('"+link+"', '"+data[key].title+"');\"/>";
+						data[key].content = "<img src=\"" + s3Url + thumbnail+"\" style=\"width: 45px; height: 34px;\" onclick=\"javascript:loadPhoto('"+link+"', '"+data[key].title+"');\"/>";
 					}
 				  }
 				  

@@ -10,7 +10,7 @@ import (
     "../s3"
 )
 
-func GetConfiguration(client string) *s3.Configuration {
+func GetConfiguration(client string, deleteOld bool) *s3.Configuration {
     var config s3.Configuration
     
     configEnc := s3.DbGetConfig(client)
@@ -29,7 +29,7 @@ func GetConfiguration(client string) *s3.Configuration {
         }
     }
     
-    if deleteOldTimestamps(&config) || deleteDuplicateTimestamps(&config) {
+    if (deleteOld && deleteOldTimestamps(&config)) || deleteDuplicateTimestamps(&config) {
         UpdateConfiguration(client, &config)
     }
     
@@ -57,7 +57,7 @@ func deleteOldTimestamps(config *s3.Configuration) bool {
     
     i := 0
     for _, x := range ts {
-        if x > int(now) {
+        if x > int(now) + 120 {
             ts[i] = x
             i++
         } else {

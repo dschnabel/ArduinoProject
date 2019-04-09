@@ -44,7 +44,7 @@
 						data[key].type = "box";
 						thumbnail = data[key].link;
 						link = thumbnail.replace(/thumbnails\//, '');
-						data[key].content = "<img src=\"" + s3Url + thumbnail+"\" onclick=\"javascript:loadPhoto('"+link+"', '"+data[key].title+"');\"/>";
+						data[key].content = "<img src=\"" + s3Url + thumbnail+"\" style=\"width: 45px; height: 34px;\" onclick=\"javascript:loadPhoto('"+link+"', '"+data[key].title+"');\"/>";
 					} else {
 						data[key].editable = true;
 					}
@@ -55,7 +55,7 @@
 				  var container = document.getElementById('visualization');
 				  var items = new vis.DataSet(data);
 				  var options = {type: 'point'};
-				  timeline = new vis.Timeline(container, items, options);
+				  timeline = new vis.Timeline(container, items, options);	
 				  var now = Date.now();
 				  
 				  timeline.setWindow(now-100000000, now+100000000);

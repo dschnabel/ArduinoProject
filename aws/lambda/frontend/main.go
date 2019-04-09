@@ -51,7 +51,7 @@ func show(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, er
     }
     var timeline []timelineItem
 
-    config := common.GetConfiguration("0")
+    config := common.GetConfiguration("0", false)
 
     for _, ts := range config.SnapshotTimestamps {
         timeline = append(timeline, timelineItem{Start: ts * 1000})

@@ -54,7 +54,7 @@ func clientSubscribed(payload string) {
         return
     }
     
-     config := common.GetConfiguration(client)
+     config := common.GetConfiguration(client, true)
     
     if len(config.SnapshotTimestamps) == 0 {
         s3.DbDelConfig(client)
@@ -129,7 +129,7 @@ func processNewConfiguration(event *s3.IoTEvent) {
         return
     }
     
-    config := common.GetConfiguration(event.Client)
+    config := common.GetConfiguration(event.Client, false)
     
     timestamps := strings.Split(string(decoded), ",")
     for _, timestamp := range timestamps {
