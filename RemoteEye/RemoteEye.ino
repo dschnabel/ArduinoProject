@@ -45,6 +45,8 @@ float voltage;
 #define MSG_TYPE_NEW_CONFIG 3
 #define MSG_TYPE_VOLTAGE 4
 
+void(* resetFunc) (void) = 0;  // declare reset fuction at address 0
+
 int freeRam () {
   extern int __heap_start, *__brkval;
   int v;
@@ -112,7 +114,7 @@ void _action_mqtt_disconnect() {
 	Hologram.mqttDisconnect();
 }
 
-void _action_take_photo() {
+bool _action_take_photo() {
 	camera_capture_photo();
 	byte messageNr = 0, packetNr = 0;
 
@@ -128,7 +130,7 @@ void _action_take_photo() {
 		int32_t sent = 0;
 
 		int bufferRemaining = Hologram.mqttInitMessage(CLIENT, messageNr, MSG_TYPE_PHOTO_DATA, packetNr++, photo_size);
-		if (bufferRemaining == -1) return;
+		if (bufferRemaining == -1) return false;
 
 		// fetch camera data and send to modem
 		while ((len = camera_read_captured_data(data, len)) > 0) {
@@ -148,9 +150,9 @@ void _action_take_photo() {
 					if (photo_size < len) photo_size = len;
 				}
 
-				if (!Hologram.mqttPublish()) break;
+				if (!Hologram.mqttPublish()) return false;
 				bufferRemaining = Hologram.mqttInitMessage(CLIENT, messageNr, MSG_TYPE_PHOTO_DATA, packetNr++, photo_size);
-				if (bufferRemaining == -1) break;
+				if (bufferRemaining == -1) return false;
 			}
 
 			if (photo_size < len) {
@@ -161,17 +163,17 @@ void _action_take_photo() {
 					sent += photo_size;
 				}
 
-				if (!Hologram.mqttPublish()) break;
+				if (!Hologram.mqttPublish()) return false;
 				photo_size = (camera_get_photo_size() - sent) * 0.5;
 				if (photo_size < len) photo_size = len;
 				bufferRemaining = Hologram.mqttInitMessage(CLIENT, messageNr, MSG_TYPE_PHOTO_DATA, packetNr++, photo_size);
-				if (bufferRemaining == -1) break;
+				if (bufferRemaining == -1) return false;
 //					mySerial.println(photo_size);
 			}
 
 			if (bufferRemaining >= len) {
 				bufferRemaining = Hologram.mqttAppendPayload(&data[index], len);
-				if (bufferRemaining == -1) break;
+				if (bufferRemaining == -1) return false;
 				photo_size -= len;
 				sent += len;
 			}
@@ -195,15 +197,18 @@ void _action_take_photo() {
 
 	} // end of context block
 
-	Hologram.mqttPublish();
+	if (!Hologram.mqttPublish()) return false;
 
 	// notify done
-	Hologram.mqttPublish(CLIENT, messageNr, MSG_TYPE_PHOTO_DONE, packetNr++, (const byte*)&timestamp, sizeof(time_t));
+	bool ret = Hologram.mqttPublish(CLIENT, messageNr, MSG_TYPE_PHOTO_DONE, packetNr++, (const byte*)&timestamp, sizeof(time_t));
+	if (!ret) return false;
 
 	camera_set_capture_done();
 
 	// give module enough time to send data
 	delay(3000);
+
+	return true;
 }
 
 bool _action_mqtt_subscribe() {
@@ -297,7 +302,6 @@ bool _action_startup_and_connect_modules() {
 	}
 
 	if (!_action_mqtt_connect()) {
-		_action_mqtt_disconnect();
 		_action_modules_off();
 		return false;
 	}
@@ -409,18 +413,18 @@ void setup() {
   _action_update_voltage();
 
   if (!_action_startup_and_connect_modules()) {
-	  _action_led_error();
-	  while (1) delay(1000);
+	  resetFunc();
+//	  _action_led_error();
   }
 
   if (!_action_send_voltage()) {
-	  _action_led_error();
-	  while (1) delay(1000);
+	  resetFunc();
+//	  _action_led_error();
   }
 
   if (!_action_retrieve_config()) {
-	  _action_led_error();
-	  while (1) delay(1000);
+	  resetFunc();
+//	  _action_led_error();
   }
 
   _action_disconnect_and_shutdown_modules();
@@ -456,10 +460,13 @@ void loop() {
 			_action_update_voltage();
 			if (_action_startup_and_connect_modules()) {
 				retry_in_progress = false;
-				_action_send_voltage();
-				_action_retrieve_config();
-				_action_take_photo();
-				_action_disconnect_and_shutdown_modules();
+				if (_action_send_voltage() && _action_retrieve_config() && _action_take_photo()) {
+					_action_disconnect_and_shutdown_modules();
+				} else {
+					_action_modules_off();
+					retry_in_progress = true;
+					_action_retry_later(300); // retry in 5 min
+				}
 			} else {
 				retry_in_progress = true;
 				_action_retry_later(300); // retry in 5 min
@@ -473,12 +480,13 @@ void loop() {
 		if (!retry_in_progress && n > last_config_update + 86400) {
 			_action_update_voltage();
 			if (_action_startup_and_connect_modules()) {
-				_action_send_voltage();
-				if (!_action_retrieve_config()) {
+				if (_action_send_voltage() && _action_retrieve_config()) {
+					_action_disconnect_and_shutdown_modules();
+				} else {
+					_action_modules_off();
 					last_config_update += 300; // retry in 5 min
 					mySerial.println(F("Could not update config."));
 				}
-				_action_disconnect_and_shutdown_modules();
 			} else {
 				last_config_update += 300; // retry in 5 min
 				mySerial.println(F("Could not startup/connect SIM. Config not updated."));

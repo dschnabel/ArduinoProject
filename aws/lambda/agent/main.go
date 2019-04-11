@@ -31,14 +31,18 @@ func main() {
 
 func router(ctx context.Context, event s3.IoTEvent) {
     if event.Category == MSG_TYPE_CLIENT_SUBSCRIBED {
+        s3.ErrorLogger.Println("event: MSG_TYPE_CLIENT_SUBSCRIBED")
         clientSubscribed(event.Payload)
     } else if event.Category == MSG_TYPE_PHOTO_DATA {
+        s3.ErrorLogger.Println("event: MSG_TYPE_PHOTO_DATA")
         s3.DbPutPhotoData(&event)
     } else if event.Category == MSG_TYPE_PHOTO_DONE {
+        s3.ErrorLogger.Println("event: MSG_TYPE_PHOTO_DONE")
         processPhotoData(&event)
     } else if event.Category == MSG_TYPE_NEW_CONFIG {
         processNewConfiguration(&event)
     } else if event.Category == MSG_TYPE_VOLTAGE {
+        s3.ErrorLogger.Println("event: MSG_TYPE_VOLTAGE")
         addVoltage(&event)
     } else {
         s3.ErrorLogger.Println("Unknown category: " + event.Category)

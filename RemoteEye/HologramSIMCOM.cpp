@@ -234,19 +234,19 @@ bool HologramSIMCOM::mqttDisconnect() {
 	// disconnect from server
 	if(_writeCommand(F("AT+CMQTTDISC=0,120\r\n"), 10, F("+CMQTTDISC: 0,0"), F("ERROR")) != 2) {
         mySerial->println(F("ERROR: failed at +CMQTTDISC=0,120 (disconnect from server)"));
-        //return false;
+        return false;
     }
 
 	// release client
 	if(_writeCommand(F("AT+CMQTTREL=0\r\n"), 5, F("OK"), F("ERROR")) != 2) {
         mySerial->println(F("ERROR: failed at +CMQTTREL=0 (release client)"));
-        //return false;
+        return false;
     }
 
 	// stop MQTT service
 	if(_writeCommand(F("AT+CMQTTSTOP\r\n"), 5, F("OK"), F("ERROR")) != 2) {
         mySerial->println(F("ERROR: failed at +CMQTTSTOP (stop MQTT service)"));
-        //return false;
+        return false;
     }
 
 	return true;
@@ -651,12 +651,12 @@ bool HologramSIMCOM::_registerNetwork(byte mode) {
 	delay(3);
 
 	if (mode == UMTS_3G) {
-		if(_writeCommand(F("AT+COPS=1,2,\"302720\",2\r\n"), 60, F("OK"), F("+CME ERROR")) == 2) {
+		if(_writeCommand(F("AT+COPS=1,2,\"302720\",2\r\n"), 10, F("OK"), F("+CME ERROR")) == 2) {
 			delay(3000);
 			return true;
 		}
 	} else if (mode == LTE_4G) {
-		if(_writeCommand(F("AT+COPS=1,2,\"302720\",7\r\n"), 60, F("OK"), F("+CME ERROR")) == 2) {
+		if(_writeCommand(F("AT+COPS=1,2,\"302720\",7\r\n"), 10, F("OK"), F("+CME ERROR")) == 2) {
 			delay(3000);
 			return true;
 		}
