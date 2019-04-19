@@ -58,12 +58,24 @@
 				  timeline = new vis.Timeline(container, items, options);	
 				  var now = Date.now();
 				  
-				  timeline.setWindow(now-100000000, now+100000000);
+				  var window = document.cookie;
+				  if (window) {
+					windowArray = window.split(';');
+					start = windowArray[0].split('=')[1];
+					end = windowArray[1].split('=')[1];
+					timeline.setWindow(parseInt(start, 10), parseInt(end, 10));
+				  } else {
+					timeline.setWindow(now-100000000, now+100000000);
+				  }
 				  
 				  timeline.on('click', function (properties) {
 					if (!properties.item && timeline.getSelection().length == 0) {
 						document.getElementById('photo').innerHTML = '';
 					}
+				  });
+				  timeline.on('rangechanged', function (properties) {
+					document.cookie = "windowStart=" + properties.start.getTime();// + "; expires=Thu, 01 Jan 1970 00:00:00 UTC"; 
+					document.cookie = "windowEnd=" + properties.end.getTime();// + "; expires=Thu, 01 Jan 1970 00:00:00 UTC";
 				  });
 				  
 			      items.on('*', function (event, properties) {
