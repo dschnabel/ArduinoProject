@@ -66,6 +66,8 @@ func clientSubscribed(payload string) {
         return
     }
     
+    s3.ErrorLogger.Println("pushing next timestamp: " + strconv.Itoa(config.SnapshotTimestamps[0]))
+    
     var buffer bytes.Buffer
     // write next timestamp only and push to client
     binary.Write(&buffer, binary.LittleEndian, int32(config.SnapshotTimestamps[0]))

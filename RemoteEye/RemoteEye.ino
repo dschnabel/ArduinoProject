@@ -17,7 +17,6 @@ SoftwareSerial mySerial(TX_PIN,RX_PIN);
 HologramSIMCOM Hologram(&mySerial);
 configuration config;
 time_t last_config_update = 0;
-bool retry_in_progress = false;
 byte loop_count = 0;
 byte time_adjust_count = 0;
 float voltage;
@@ -324,9 +323,7 @@ bool _action_time_for_photo(time_t now) {
 }
 
 void _action_retry_later(unsigned int delay_sec) {
-	if (config.timestamp > delay_sec) {
-		config.timestamp = now() + delay_sec;
-	}
+	config.timestamp = now() + delay_sec;
 }
 
 void _action_update_voltage() {
@@ -459,16 +456,13 @@ void loop() {
 		if (_action_time_for_photo(n)) {
 			_action_update_voltage();
 			if (_action_startup_and_connect_modules()) {
-				retry_in_progress = false;
 				if (_action_send_voltage() && _action_retrieve_config() && _action_take_photo()) {
 					_action_disconnect_and_shutdown_modules();
 				} else {
 					_action_modules_off();
-					retry_in_progress = true;
 					_action_retry_later(300); // retry in 5 min
 				}
 			} else {
-				retry_in_progress = true;
 				_action_retry_later(300); // retry in 5 min
 				mySerial.println(F("Could not startup/connect SIM. No photo taken."));
 			}
@@ -477,7 +471,7 @@ void loop() {
 		}
 
 		// make sure we get settings at least once a day (24h = 86400s)
-		if (!retry_in_progress && n > last_config_update + 86400) {
+		if (n > last_config_update + 86400) {
 			_action_update_voltage();
 			if (_action_startup_and_connect_modules()) {
 				if (_action_send_voltage() && _action_retrieve_config()) {
