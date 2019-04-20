@@ -9,7 +9,7 @@ import (
 
     "github.com/aws/aws-lambda-go/events"
     "github.com/aws/aws-lambda-go/lambda"
-    "../s3"
+    "../aws"
     "../common"
 )
 
@@ -29,7 +29,7 @@ func router(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, 
 }
 
 func serverError(err error) (events.APIGatewayProxyResponse, error) {
-    s3.ErrorLogger.Println(err.Error())
+    aws.ErrorLogger.Println(err.Error())
 
     return events.APIGatewayProxyResponse{
         StatusCode: http.StatusInternalServerError,
@@ -58,7 +58,7 @@ func show(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, er
     }
 
     // thumbnails
-    s3Objects := s3.S3GetThumbnails("0")
+    s3Objects := aws.S3GetThumbnails("0")
     for _, obj := range s3Objects {
         if !strings.HasSuffix(*obj.Key, ".jpg") {
             continue
@@ -69,7 +69,7 @@ func show(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, er
         t, err := time.Parse("2006-01-02T15:04:05MST-0700", date)
 
         if err != nil {
-            s3.ErrorLogger.Println(err.Error())
+            aws.ErrorLogger.Println(err.Error())
             continue
         }
         
@@ -86,20 +86,20 @@ func show(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, er
 }
 
 func create(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {   
-    var config s3.Configuration
+    var config aws.Configuration
     
     timestamps := strings.Split(string(req.Body), ",")
     for _, timestamp := range timestamps {
         ts, err := strconv.Atoi(timestamp)
         if err != nil {
-            s3.ErrorLogger.Println(err.Error())
+            aws.ErrorLogger.Println(err.Error())
         } else {
             config.SnapshotTimestamps = append(config.SnapshotTimestamps, ts)
         }
     }
     
     if len(config.SnapshotTimestamps) == 0 {
-        s3.DbDelConfig("0")
+        aws.DbDelConfig("0")
     } else {
         common.UpdateConfiguration("0", &config)
     }

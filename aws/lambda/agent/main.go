@@ -15,7 +15,7 @@ import (
 
     "github.com/aws/aws-lambda-go/lambda"
     "github.com/disintegration/imaging"
-    "../s3"
+    "../aws"
     "../common"
 )
 
@@ -29,23 +29,23 @@ func main() {
     lambda.Start(router)
 }
 
-func router(ctx context.Context, event s3.IoTEvent) {
+func router(ctx context.Context, event aws.IoTEvent) {
     if event.Category == MSG_TYPE_CLIENT_SUBSCRIBED {
-        s3.ErrorLogger.Println("event: MSG_TYPE_CLIENT_SUBSCRIBED")
+        aws.ErrorLogger.Println("event: MSG_TYPE_CLIENT_SUBSCRIBED")
         clientSubscribed(event.Payload)
     } else if event.Category == MSG_TYPE_PHOTO_DATA {
-        s3.ErrorLogger.Println("event: MSG_TYPE_PHOTO_DATA")
-        s3.DbPutPhotoData(&event)
+        aws.ErrorLogger.Println("event: MSG_TYPE_PHOTO_DATA")
+        aws.DbPutPhotoData(&event)
     } else if event.Category == MSG_TYPE_PHOTO_DONE {
-        s3.ErrorLogger.Println("event: MSG_TYPE_PHOTO_DONE")
+        aws.ErrorLogger.Println("event: MSG_TYPE_PHOTO_DONE")
         processPhotoData(&event)
     } else if event.Category == MSG_TYPE_NEW_CONFIG {
         processNewConfiguration(&event)
     } else if event.Category == MSG_TYPE_VOLTAGE {
-        s3.ErrorLogger.Println("event: MSG_TYPE_VOLTAGE")
+        aws.ErrorLogger.Println("event: MSG_TYPE_VOLTAGE")
         addVoltage(&event)
     } else {
-        s3.ErrorLogger.Println("Unknown category: " + event.Category)
+        aws.ErrorLogger.Println("Unknown category: " + event.Category)
     }
 }
 
@@ -61,28 +61,30 @@ func clientSubscribed(payload string) {
      config := common.GetConfiguration(client, true)
     
     if len(config.SnapshotTimestamps) == 0 {
-        s3.DbDelConfig(client)
-        s3.IotPushUpdate("c/" + client, []byte{0})
+        aws.ErrorLogger.Println("no timestamp to push")
+        
+        aws.DbDelConfig(client)
+        aws.IotPushUpdate("c/" + client, []byte{0})
         return
     }
     
-    s3.ErrorLogger.Println("pushing next timestamp: " + strconv.Itoa(config.SnapshotTimestamps[0]))
+    aws.ErrorLogger.Println("pushing next timestamp: " + strconv.Itoa(config.SnapshotTimestamps[0]))
     
     var buffer bytes.Buffer
     // write next timestamp only and push to client
     binary.Write(&buffer, binary.LittleEndian, int32(config.SnapshotTimestamps[0]))
     
-    s3.IotPushUpdate("c/" + client, buffer.Bytes())
+    aws.IotPushUpdate("c/" + client, buffer.Bytes())
 }
 
-func processPhotoData(event *s3.IoTEvent) {
+func processPhotoData(event *aws.IoTEvent) {
     data := assemblePhotoData(event)
     if data != nil && len(data) > 0 {
         filename := event.Client + "/"
         
         decoded, err := base64.StdEncoding.DecodeString(event.Payload)
         if err != nil {
-            s3.ErrorLogger.Println("Timestamp decode error: " + err.Error())
+            aws.ErrorLogger.Println("Timestamp decode error: " + err.Error())
             filename += time.Now().Format("2006-01-02T15:04:05") + "GMT-0700_err.jpg"
         } else {        
             var unixTime uint32
@@ -91,12 +93,12 @@ func processPhotoData(event *s3.IoTEvent) {
             filename += time.Unix(int64(unixTime), 0).Format("2006-01-02T15:04:05") + "GMT-0700.jpg"
         }
         
-        s3.S3SaveFile(filename, data)
+        aws.S3SaveFile(filename, data)
         
         // create thumbnail
         srcImg, _, err := image.Decode(bytes.NewReader(data))
         if err != nil {
-            s3.ErrorLogger.Println("Image decode error: " + err.Error())
+            aws.ErrorLogger.Println("Image decode error: " + err.Error())
         }
         dstImg := imaging.Resize(srcImg, 45, 0, imaging.Lanczos)
         
@@ -105,12 +107,12 @@ func processPhotoData(event *s3.IoTEvent) {
         jpeg.Encode(writer, dstImg, &jpeg.Options{jpeg.DefaultQuality})
         writer.Flush()
         
-        s3.S3SaveFile("thumbnails/" + filename, []byte(b.String()))
+        aws.S3SaveFile("thumbnails/" + filename, []byte(b.String()))
     }
 }
 
-func assemblePhotoData(event *s3.IoTEvent) ([]byte) {
-    payload := s3.DbGetPhotoData(event)
+func assemblePhotoData(event *aws.IoTEvent) ([]byte) {
+    payload := aws.DbGetPhotoData(event)
     if payload == nil {
         return nil
     }
@@ -119,7 +121,7 @@ func assemblePhotoData(event *s3.IoTEvent) ([]byte) {
     for i := 0; i < len(payload); i++ {
         decoded, err := base64.StdEncoding.DecodeString(payload[i])
         if err != nil {
-            s3.ErrorLogger.Println("Data decode error: " + err.Error())
+            aws.ErrorLogger.Println("Data decode error: " + err.Error())
             break
         }
         data = append(data, decoded...)
@@ -128,10 +130,10 @@ func assemblePhotoData(event *s3.IoTEvent) ([]byte) {
     return []byte(data)
 }
 
-func processNewConfiguration(event *s3.IoTEvent) {
+func processNewConfiguration(event *aws.IoTEvent) {
     decoded, err := base64.StdEncoding.DecodeString(event.Payload)
     if err != nil {
-        s3.ErrorLogger.Println(err.Error())
+        aws.ErrorLogger.Println(err.Error())
         return
     }
     
@@ -141,7 +143,7 @@ func processNewConfiguration(event *s3.IoTEvent) {
     for _, timestamp := range timestamps {
         ts, err := strconv.Atoi(timestamp)
         if err != nil {
-            s3.ErrorLogger.Println(err.Error())
+            aws.ErrorLogger.Println(err.Error())
         } else {
             if ts > 0 {
                 // append new timestamp
@@ -160,21 +162,21 @@ func processNewConfiguration(event *s3.IoTEvent) {
     }
     
     if len(config.SnapshotTimestamps) == 0 {
-        s3.DbDelConfig(event.Client)
+        aws.DbDelConfig(event.Client)
     } else {
         common.UpdateConfiguration(event.Client, config)
     }
 }
 
-func addVoltage(event *s3.IoTEvent) {
+func addVoltage(event *aws.IoTEvent) {
     decoded, err := base64.StdEncoding.DecodeString(event.Payload)
     if err != nil {
-        s3.ErrorLogger.Println(err.Error())
+        aws.ErrorLogger.Println(err.Error())
         return
     }
     
     bits := binary.LittleEndian.Uint32(decoded)
     voltage := math.Float32frombits(bits)
     
-    s3.DbPutVoltage(event.Client, voltage)
+    aws.DbPutVoltage(event.Client, voltage)
 }

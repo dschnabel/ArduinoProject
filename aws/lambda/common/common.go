@@ -7,17 +7,17 @@ import (
     "time"
     "sort"
     
-    "../s3"
+    "../aws"
 )
 
-func GetConfiguration(client string, deleteOld bool) *s3.Configuration {
-    var config s3.Configuration
+func GetConfiguration(client string, deleteOld bool) *aws.Configuration {
+    var config aws.Configuration
     
-    configEnc := s3.DbGetConfig(client)
+    configEnc := aws.DbGetConfig(client)
     if (configEnc != "") {
         decoded, err := base64.StdEncoding.DecodeString(configEnc)
         if err != nil {
-            s3.ErrorLogger.Println(err.Error())
+            aws.ErrorLogger.Println(err.Error())
         }
         
         buffer := bytes.NewBuffer(decoded)
@@ -25,7 +25,7 @@ func GetConfiguration(client string, deleteOld bool) *s3.Configuration {
         
         err = dec.Decode(&config)
         if err != nil {
-            s3.ErrorLogger.Println(err.Error())
+            aws.ErrorLogger.Println(err.Error())
         }
     }
     
@@ -37,20 +37,20 @@ func GetConfiguration(client string, deleteOld bool) *s3.Configuration {
     return &config
 }
 
-func UpdateConfiguration(client string, config *s3.Configuration) {
+func UpdateConfiguration(client string, config *aws.Configuration) {
     var buffer bytes.Buffer
     enc := gob.NewEncoder(&buffer)
     err := enc.Encode(config)
     if err != nil {
-        s3.ErrorLogger.Println(err.Error())
+        aws.ErrorLogger.Println(err.Error())
         return
     }
     
     encoded := base64.StdEncoding.EncodeToString([]byte(buffer.String()))
-    s3.DbAddOrUpdateConfig(client, encoded)
+    aws.DbAddOrUpdateConfig(client, encoded)
 }
 
-func deleteOldTimestamps(config *s3.Configuration) bool {
+func deleteOldTimestamps(config *aws.Configuration) bool {
     updated := false
     now := time.Now().Unix()
     ts := config.SnapshotTimestamps
@@ -72,7 +72,7 @@ func deleteOldTimestamps(config *s3.Configuration) bool {
     return updated
 }
 
-func deleteDuplicateTimestamps(config *s3.Configuration) bool {
+func deleteDuplicateTimestamps(config *aws.Configuration) bool {
     updated := false
     m := make(map[int]bool)
     
