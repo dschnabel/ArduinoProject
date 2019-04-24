@@ -26,6 +26,7 @@ float voltage;
 #define VOLTAGE_READ_ENABLE_PIN 4
 #define VOLTAGE_READ_PIN A3
 #define LED_PIN 7
+#define PHOTO_MAX_PUBLISH_COUNT 12 	// workaround to break out of loop if there's a problem with the camera
 
 #define ACTION_CONNECT 1
 #define ACTION_DISCONNECT 2
@@ -132,6 +133,7 @@ bool _action_take_photo() {
 		if (bufferRemaining == -1) return false;
 
 		// fetch camera data and send to modem
+		byte publishCount = 0;
 		while ((len = camera_read_captured_data(data, len)) > 0) {
 			byte index = 0;
 
@@ -149,7 +151,7 @@ bool _action_take_photo() {
 					if (photo_size < len) photo_size = len;
 				}
 
-				if (!Hologram.mqttPublish()) return false;
+				if (publishCount++ > PHOTO_MAX_PUBLISH_COUNT || !Hologram.mqttPublish()) return false;
 				bufferRemaining = Hologram.mqttInitMessage(CLIENT, messageNr, MSG_TYPE_PHOTO_DATA, packetNr++, photo_size);
 				if (bufferRemaining == -1) return false;
 			}
@@ -162,7 +164,7 @@ bool _action_take_photo() {
 					sent += photo_size;
 				}
 
-				if (!Hologram.mqttPublish()) return false;
+				if (publishCount++ > PHOTO_MAX_PUBLISH_COUNT || !Hologram.mqttPublish()) return false;
 				photo_size = (camera_get_photo_size() - sent) * 0.5;
 				if (photo_size < len) photo_size = len;
 				bufferRemaining = Hologram.mqttInitMessage(CLIENT, messageNr, MSG_TYPE_PHOTO_DATA, packetNr++, photo_size);
