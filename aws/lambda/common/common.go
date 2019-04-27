@@ -57,7 +57,7 @@ func deleteOldTimestamps(config *aws.Configuration) bool {
     
     i := 0
     for _, x := range ts {
-        if x > int(now) + 120 {
+        if x > int(now) + 600 {
             ts[i] = x
             i++
         } else {
