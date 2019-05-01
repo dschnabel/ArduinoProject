@@ -6,6 +6,7 @@ import (
     "strings"
     "time"
     "strconv"
+    "sort"
 
     "github.com/aws/aws-lambda-go/events"
     "github.com/aws/aws-lambda-go/lambda"
@@ -20,7 +21,11 @@ func main() {
 func router(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
     switch req.HTTPMethod {
     case "GET":
-        return show(req)
+        if req.Path == "/voltage" {
+            return showVoltage(req)
+        } else {
+            return showTimeline(req)
+        }
     case "POST":
         return create(req)
     default:
@@ -44,7 +49,7 @@ func clientError(status int) (events.APIGatewayProxyResponse, error) {
     }, nil
 }
 
-func show(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+func showTimeline(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
     type timelineItem struct {
         Start int           `json:"start"`
         Link  string        `json:"link"`
@@ -83,6 +88,30 @@ func show(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, er
         StatusCode: http.StatusOK,
         Body:       string(json),
     }, nil
+}
+
+func showVoltage(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+    voltage := aws.DbGetVoltage("0")
+    
+    if voltage != nil {
+        sort.Slice(voltage, func(i, j int) bool {
+            return voltage[i].Timestamp < voltage[j].Timestamp
+        })
+        
+        json, _ := json.Marshal(voltage)
+        
+        return events.APIGatewayProxyResponse{
+            Headers:    map[string]string{"Access-Control-Allow-Origin": "*"},
+            StatusCode: http.StatusOK,
+            Body:       string(json),
+        }, nil
+    } else {
+        return events.APIGatewayProxyResponse{
+            Headers:    map[string]string{"Access-Control-Allow-Origin": "*"},
+            StatusCode: 500,
+            Body:       "Error",
+        }, nil
+    }
 }
 
 func create(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {   

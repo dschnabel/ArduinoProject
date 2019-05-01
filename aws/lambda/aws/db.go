@@ -9,6 +9,7 @@ import (
     "github.com/aws/aws-sdk-go/aws/session"
     "github.com/aws/aws-sdk-go/service/dynamodb"
     "github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
+    "github.com/aws/aws-sdk-go/service/dynamodb/expression"
 )
 
 var db = dynamodb.New(session.New(), aws.NewConfig().WithRegion("us-west-2"))
@@ -20,6 +21,11 @@ type DbItem struct {
 
 type Configuration struct {
     SnapshotTimestamps  []int
+}
+
+type VoltageItem struct {
+    Timestamp   int     `json:"timestamp"`
+    Voltage     float64 `json:"voltage"`
 }
 
 func DbPutPhotoData(ioTEvent *IoTEvent) {
@@ -201,4 +207,45 @@ func DbPutVoltage(client string, voltage float32) {
     if err != nil {
         ErrorLogger.Println(err.Error())
     }
+}
+
+func DbGetVoltage(client string) ([]VoltageItem) {
+    c, _ := strconv.Atoi(client)
+    
+    filter := expression.Name("client").Equal(expression.Value(c))
+    proj := expression.NamesList(expression.Name("timestamp"), expression.Name("voltage"))
+    expr, err := expression.NewBuilder().WithFilter(filter).WithProjection(proj).Build()
+    if err != nil {
+        ErrorLogger.Println(err.Error())
+        return nil
+    }
+    
+    params := &dynamodb.ScanInput{
+        ExpressionAttributeNames:  expr.Names(),
+        ExpressionAttributeValues: expr.Values(),
+        FilterExpression:          expr.Filter(),
+        ProjectionExpression:      expr.Projection(),
+        TableName:                 aws.String("RE_Voltage"),
+    }
+    
+    result, err := db.Scan(params)
+    if err != nil {
+        ErrorLogger.Println(err.Error())
+        return nil
+    }
+
+    var voltageItem []VoltageItem
+    
+    for _, i := range result.Items {
+        item := VoltageItem{}
+        err = dynamodbattribute.UnmarshalMap(i, &item)
+        if err != nil {
+            ErrorLogger.Println(err.Error())
+            return nil
+        }
+        
+        voltageItem = append(voltageItem, item)
+    }
+    
+    return voltageItem
 }

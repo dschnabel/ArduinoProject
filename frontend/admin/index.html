@@ -4,16 +4,19 @@
 	<meta charset="UTF-8">
 	<title>Remote Eye Admin</title>
 	
+	<link href='metricsgraphicsjs/metricsgraphics.css' rel='stylesheet' type='text/css'>
     <link href="picker/css/datetimepicker.css" rel="stylesheet" type="text/css"/>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
 	<link href="https://www.jqueryscript.net/css/jquerysctipttop.css" rel="stylesheet" type="text/css">
     <link href="../vis/dist/vis.css" rel="stylesheet" type="text/css" />
 	
     <script src="https://code.jquery.com/jquery-1.12.4.min.js" integrity="sha384-nvAa0+6Qg9clwYCGGPpDQLVpLNn0fRaROjHqs13t4Ggj3Ez50XnGQqc/r8MhnRDZ" crossorigin="anonymous"></script>
+	<script type="text/javascript" src="metricsgraphicsjs/d3.v4.min.js"></script>
+	<script type="text/javascript" src="metricsgraphicsjs/metricsgraphics.min.js"></script>
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.22.0/moment-with-locales.min.js"></script>
     <script type="text/javascript" src="picker/js/datetimepicker.js"></script>
-	<script src="../vis/dist/vis.js"></script>
-	<script src="url.js"></script>
+	<script type="text/javascript" src="../vis/dist/vis.js"></script>
+	<script type="text/javascript" src="url.js"></script>
 
     <script type="text/javascript">
 		var timeline;
@@ -141,6 +144,37 @@
   
 </head>
 <body>
+	<p><div id="battery"></div></p>
+	<script>
+		function formatDate(data) {
+			for(var d in data) {
+				data[d]['timestamp'] = new Date(data[d]['timestamp'] * 1000);
+			}
+			return data;
+		}
+
+		d3.json(api + '/voltage', function(data) {
+			MG.data_graphic({
+				title: "Battery Level",
+				center_title_full_width: true,
+				data: formatDate(data),
+				min_y: 5,
+				max_y: 10,
+				y_extended_ticks: true,
+				y_label: 'Volts',
+				yax_count: 7,
+				interpolate: d3.curveLinear,
+				full_width: true,
+				height: 220,
+				target: '#battery',
+				x_accessor: 'timestamp',
+				y_accessor: 'voltage',
+				brush: 'xy',
+			})
+		})
+	</script>
+
+	<div style="font-size: 1.2rem; text-align: center">Date Picker</div>
 	<div style="width: 250px; margin: auto auto;">
 		<div id="picker"> </div>
 		<input type="hidden" id="result" value="" />
@@ -150,6 +184,6 @@
 	<div id="visualization"></div>
 	<div id="loading">loading...</div>
 	
-	<p><div id="photo" style="text-align:center"></div></p>
+	<p><div id="photo" style="text-align:center; height:505px"></div></p>
 </body>
 </html>
