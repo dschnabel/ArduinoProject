@@ -26,7 +26,7 @@ float voltage;
 #define VOLTAGE_READ_ENABLE_PIN 4
 #define VOLTAGE_READ_PIN A3
 #define LED_PIN 7
-#define PHOTO_MAX_PUBLISH_COUNT 12 	// workaround to break out of loop if there's a problem with the camera
+#define PHOTO_MAX_PUBLISHED_SIZE 50000 	// workaround to break out of loop if there's a problem with the camera
 
 #define ACTION_CONNECT 1
 #define ACTION_DISCONNECT 2
@@ -130,10 +130,12 @@ bool _action_take_photo() {
 		int32_t sent = 0;
 
 		int bufferRemaining = Hologram.mqttInitMessage(CLIENT, messageNr, MSG_TYPE_PHOTO_DATA, packetNr++, photo_size);
-		if (bufferRemaining == -1) return false;
+		if (bufferRemaining == -1) {
+			mySerial.println(F("no buffer remaining! (a)"));
+			return false;
+		}
 
 		// fetch camera data and send to modem
-		byte publishCount = 0;
 		while ((len = camera_read_captured_data(data, len)) > 0) {
 			byte index = 0;
 
@@ -151,9 +153,20 @@ bool _action_take_photo() {
 					if (photo_size < len) photo_size = len;
 				}
 
-				if (publishCount++ > PHOTO_MAX_PUBLISH_COUNT || !Hologram.mqttPublish()) return false;
+				if (sent > PHOTO_MAX_PUBLISHED_SIZE) {
+					mySerial.println(F("max size reached! (a)"));
+					return false;
+				}
+
+				if (!Hologram.mqttPublish()) {
+					mySerial.println(F("error publishing! (a)"));
+					return false;
+				}
 				bufferRemaining = Hologram.mqttInitMessage(CLIENT, messageNr, MSG_TYPE_PHOTO_DATA, packetNr++, photo_size);
-				if (bufferRemaining == -1) return false;
+				if (bufferRemaining == -1) {
+					mySerial.println(F("no buffer remaining! (b)"));
+					return false;
+				}
 			}
 
 			if (photo_size < len) {
@@ -164,17 +177,31 @@ bool _action_take_photo() {
 					sent += photo_size;
 				}
 
-				if (publishCount++ > PHOTO_MAX_PUBLISH_COUNT || !Hologram.mqttPublish()) return false;
+				if (sent > PHOTO_MAX_PUBLISHED_SIZE) {
+					mySerial.println(F("max size reached! (b)"));
+					return false;
+				}
+
+				if (!Hologram.mqttPublish()) {
+					mySerial.println(F("error publishing! (b)"));
+					return false;
+				}
 				photo_size = (camera_get_photo_size() - sent) * 0.5;
 				if (photo_size < len) photo_size = len;
 				bufferRemaining = Hologram.mqttInitMessage(CLIENT, messageNr, MSG_TYPE_PHOTO_DATA, packetNr++, photo_size);
-				if (bufferRemaining == -1) return false;
+				if (bufferRemaining == -1) {
+					mySerial.println(F("no buffer remaining! (c)"));
+					return false;
+				}
 //					mySerial.println(photo_size);
 			}
 
 			if (bufferRemaining >= len) {
 				bufferRemaining = Hologram.mqttAppendPayload(&data[index], len);
-				if (bufferRemaining == -1) return false;
+				if (bufferRemaining == -1) {
+					mySerial.println(F("no buffer remaining! (d)"));
+					return false;
+				}
 				photo_size -= len;
 				sent += len;
 			}
@@ -198,17 +225,24 @@ bool _action_take_photo() {
 
 	} // end of context block
 
-	if (!Hologram.mqttPublish()) return false;
+	if (!Hologram.mqttPublish()) {
+		mySerial.println(F("error publishing! (c)"));
+		return false;
+	}
 
 	// notify done
 	bool ret = Hologram.mqttPublish(CLIENT, messageNr, MSG_TYPE_PHOTO_DONE, packetNr++, (const byte*)&timestamp, sizeof(time_t));
-	if (!ret) return false;
+	if (!ret) {
+		mySerial.println(F("error notifying! (a)"));
+		return false;
+	}
 
 	camera_set_capture_done();
 
 	// give module enough time to send data
 	delay(3000);
 
+	mySerial.println(F("photo taken!"));
 	return true;
 }
 
