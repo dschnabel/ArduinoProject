@@ -102,6 +102,15 @@ bool _action_modules_on() {
 }
 
 void _action_modules_off() {
+	camera_stop();
+
+	byte pin[] = {11, 12, 13, 5, A4, A5};
+	byte pinCount = sizeof(pin) / sizeof(pin[0]);
+    for (byte i = 0; i < pinCount; i++) {
+        pinMode(pin[i], OUTPUT);
+        digitalWrite(pin[i], LOW);
+    }
+
 	mySerial.println(F("MODULES OFF"));
 	digitalWrite(MODULES_SWITCH, LOW);
 }

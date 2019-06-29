@@ -9,6 +9,7 @@
 #define CAM_H_
 
 void camera_setup(byte dimension);
+void camera_stop();
 void camera_capture_photo();
 uint32_t camera_get_photo_size();
 uint8_t camera_read_captured_data(uint8_t *buffer, uint8_t size);

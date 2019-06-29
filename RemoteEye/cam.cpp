@@ -124,6 +124,10 @@ void camera_setup(byte dimension) {
 	myCAM.clear_fifo_flag();
 }
 
+void camera_stop() {
+	SPI.end();
+}
+
 bool _camera_capture_ready() {
 	delay(50);
 	if (myCAM.get_bit(ARDUCHIP_TRIG, CAP_DONE_MASK)) {
