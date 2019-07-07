@@ -26,6 +26,7 @@ float voltage;
 #define VOLTAGE_READ_ENABLE_PIN 4
 #define VOLTAGE_READ_PIN A3
 #define LED_PIN 7
+#define RESET_PIN 8
 #define PHOTO_MAX_PUBLISHED_SIZE 50000 	// workaround to break out of loop if there's a problem with the camera
 
 #define ACTION_CONNECT 1
@@ -45,12 +46,15 @@ float voltage;
 #define MSG_TYPE_NEW_CONFIG 3
 #define MSG_TYPE_VOLTAGE 4
 
-void(* resetFunc) (void) = 0;  // declare reset fuction at address 0
-
 int freeRam () {
   extern int __heap_start, *__brkval;
   int v;
   return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval);
+}
+
+void _soft_reset() {
+	mySerial.println(F("Resetting arduino..."));
+	digitalWrite(RESET_PIN, LOW);
 }
 
 byte _get_code() {
@@ -164,6 +168,9 @@ bool _action_take_photo() {
 
 				if (sent > PHOTO_MAX_PUBLISHED_SIZE) {
 					mySerial.println(F("max size reached! (a)"));
+					_action_modules_off();
+					delay(3000);
+					_soft_reset();
 					return false;
 				}
 
@@ -188,6 +195,9 @@ bool _action_take_photo() {
 
 				if (sent > PHOTO_MAX_PUBLISHED_SIZE) {
 					mySerial.println(F("max size reached! (b)"));
+					_action_modules_off();
+					delay(3000);
+					_soft_reset();
 					return false;
 				}
 
@@ -437,6 +447,9 @@ void _input_action() {
 //#####################################################################
 
 void setup() {
+  digitalWrite(RESET_PIN, HIGH);
+  delay(200);
+  pinMode(RESET_PIN, OUTPUT);
 
   mySerial.begin(57600);
   while(!mySerial);
@@ -455,17 +468,17 @@ void setup() {
   _action_update_voltage();
 
   if (!_action_startup_and_connect_modules()) {
-	  resetFunc();
+	  _soft_reset();
 //	  _action_led_error();
   }
 
   if (!_action_send_voltage()) {
-	  resetFunc();
+	  _soft_reset();
 //	  _action_led_error();
   }
 
   if (!_action_retrieve_config()) {
-	  resetFunc();
+	  _soft_reset();
 //	  _action_led_error();
   }
 
