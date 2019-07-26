@@ -285,7 +285,7 @@ int16_t HologramSIMCOM::mqttInitMessage(uint8_t client, uint8_t messageNr, uint8
 		delay(20);
 	}
 
-    _SENDBUFFER = SEND_BUFFER;
+    _SENDBUFFER = size < SEND_BUFFER ? size : SEND_BUFFER;
 
     // start payload
     if (1) {
@@ -294,7 +294,7 @@ int16_t HologramSIMCOM::mqttInitMessage(uint8_t client, uint8_t messageNr, uint8
 
 		if (1) {
 			char cstr[8];
-			utoa(size < (uint32_t)_SENDBUFFER ? size : _SENDBUFFER, cstr, 10);
+			utoa(_SENDBUFFER, cstr, 10);
 			strcpy(cmd, "AT+CMQTTPAYLOAD=0,"); strcat(cmd, cstr); strcat(cmd, "\r\n");
 		}
 

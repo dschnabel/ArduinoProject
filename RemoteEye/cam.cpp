@@ -13,69 +13,12 @@
 #include "memorysaver.h"
 
 const byte camera_CS = 5;
-bool camera_is_header = false;
-bool camera_read_in_progress = false;
 
 ArduCAM myCAM(OV2640, camera_CS);
 
-uint8_t camera_temp = 0, camera_temp_last = 0;
-uint32_t camera_length = 0;
-uint32_t camera_photo_size = 0;
-
-void _camera_prepare_fifo_read() {
-	camera_temp = 0;
-	camera_temp_last = 0;
-	camera_length = 0;
-
-	camera_length = camera_get_photo_size();
-	if (camera_length >= MAX_FIFO_SIZE) { //512 kb
-		return;
-	}
-	if (camera_length == 0 ) { //0 kb
-		return;
-	}
-	myCAM.CS_LOW();
-	myCAM.set_fifo_burst();
-	camera_temp =  SPI.transfer(0x00);
-	camera_length--;
-}
-
-uint8_t _camera_read_fifo_burst(uint8_t *buffer, uint8_t size)
-{
-	uint8_t b_index = 0;
-
-	while (camera_length--) {
-		camera_temp_last = camera_temp;
-		camera_temp =  SPI.transfer(0x00);
-
-		if (camera_is_header == true) {
-			buffer[b_index++] = camera_temp;
-		} else if ((camera_temp == 0xD8) & (camera_temp_last == 0xFF)) {
-			camera_is_header = true;
-			buffer[b_index++] = camera_temp_last;
-			buffer[b_index++] = camera_temp;
-		}
-
-		if ((camera_temp == 0xD9) && (camera_temp_last == 0xFF)) {
-			buffer[b_index++] = camera_temp;
-			break;
-		}
-
-		delayMicroseconds(15);
-
-		if (b_index == size) {
-			myCAM.CS_HIGH();
-			return b_index;
-		}
-	}
-
-	delayMicroseconds(15);
-	myCAM.CS_HIGH();
-	camera_is_header = false;
-	return b_index;
-}
-
 void camera_setup(byte dimension) {
+	delay(500);
+
 	uint8_t vid, pid, temp;
 	Wire.begin();
 
@@ -144,34 +87,44 @@ void camera_capture_photo() {
 	while (!_camera_capture_ready());
 }
 
-uint32_t camera_get_photo_size() {
-	if (camera_photo_size == 0) {
-		camera_photo_size = myCAM.read_fifo_length();
-	}
-	return camera_photo_size;
+void _camera_reset_read() {
+	uint8_t flags = myCAM.read_reg(ARDUCHIP_FIFO);
+	myCAM.write_reg(ARDUCHIP_FIFO, flags|FIFO_RDPTR_RST_MASK);
 }
 
-uint8_t camera_read_captured_data(uint8_t *buffer, uint8_t size) {
+uint32_t camera_get_photo_size() {
+	_camera_reset_read();
+
+	uint8_t old = 0;
 	uint8_t read = 0;
+	uint32_t len = myCAM.read_fifo_length();
+	uint32_t real_len = 0;
 
-	if (!camera_read_in_progress) {
-		_camera_prepare_fifo_read();
-
-		camera_read_in_progress = true;
-	} else {
-		myCAM.CS_LOW();
-		myCAM.set_fifo_burst();
+	uint32_t i;
+	for (i = 0; i < len; i++) {
+		old = read;
+		read = myCAM.read_fifo();
+		if ((read == 0xD9) && (old == 0xFF)) {
+			real_len = i+1;
+			break;
+		}
 	}
 
-	if (camera_read_in_progress) {
-		read = _camera_read_fifo_burst(buffer, size);
+	if (i == len) {
+		real_len = 0;
 	}
 
-	return read;
+	_camera_reset_read();
+
+	return real_len;
+}
+
+void camera_read_captured_data(uint8_t *buffer, uint8_t size) {
+	for (int i = 0; i < size; i++) {
+		buffer[i] = myCAM.read_fifo();
+	}
 }
 
 void camera_set_capture_done() {
-	camera_read_in_progress = false;
 	myCAM.clear_fifo_flag();
-	camera_photo_size = 0;
 }
