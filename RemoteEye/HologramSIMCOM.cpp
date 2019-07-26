@@ -253,6 +253,10 @@ bool HologramSIMCOM::mqttDisconnect() {
 }
 
 int16_t HologramSIMCOM::mqttInitMessage(uint8_t client, uint8_t messageNr, uint8_t type, uint8_t packetNr, uint32_t size) {
+	_SENDBUFFER = SEND_BUFFER;
+	mySerial->print(F("bytes: "));mySerial->println(size < (uint32_t)_SENDBUFFER ? size : _SENDBUFFER);
+	return _SENDBUFFER;
+
 	// set topic
 	if (1) {
 		char topic[20];
@@ -313,12 +317,14 @@ int16_t HologramSIMCOM::mqttAppendPayload(const byte *payload, uint32_t len) {
 	}
 	_SENDBUFFER -= len;
 
-	_writeBytesToSerial(payload, len, true);
+//	_writeBytesToSerial(payload, len, true);
 
 	return _SENDBUFFER;
 }
 
 bool HologramSIMCOM::mqttPublish() {
+	return true;
+
 	// workaround: need to block here until we're ready to send
 	isOn();
 
@@ -333,6 +339,8 @@ bool HologramSIMCOM::mqttPublish() {
 
 bool HologramSIMCOM::mqttPublish(uint8_t client, uint8_t messageNr, uint8_t type, uint8_t packetNr,
 		const byte *payload, uint32_t len) {
+	return true;
+
 	if (mqttInitMessage(client, messageNr, type, packetNr, len) == -1) return false;
 	if (mqttAppendPayload(payload, len) == -1) return false;
 	return mqttPublish();

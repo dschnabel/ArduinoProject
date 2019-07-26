@@ -86,7 +86,7 @@ bool _action_modules_on() {
 		digitalWrite(MODULES_SWITCH, HIGH);
 
 		//camera_setup(OV2640_160x120);
-		camera_setup(OV2640_640x480);
+//		camera_setup(OV2640_640x480, &mySerial);
 
 		if (!Hologram.begin(57600)) {
 			return false;
@@ -127,8 +127,10 @@ void _action_mqtt_disconnect() {
 	Hologram.mqttDisconnect();
 }
 
-bool _action_take_photo() {
-	camera_capture_photo();
+bool _action_take_photo(ArduCAM *myCAM) {
+	camera_capture_photo(myCAM);
+	camera_read_captured_data(myCAM, 0, 0, &mySerial);
+	return true;
 	byte messageNr = 0, packetNr = 0;
 
 	// get UNIX timestamp
@@ -139,7 +141,7 @@ bool _action_take_photo() {
 
 		byte data[32];
 		byte len = sizeof(data);
-		int32_t photo_size = camera_get_photo_size()* 0.80;
+		int32_t photo_size = camera_get_photo_size(myCAM)* 0.80;
 		int32_t sent = 0;
 
 		int bufferRemaining = Hologram.mqttInitMessage(CLIENT, messageNr, MSG_TYPE_PHOTO_DATA, packetNr++, photo_size);
@@ -149,7 +151,7 @@ bool _action_take_photo() {
 		}
 
 		// fetch camera data and send to modem
-		while ((len = camera_read_captured_data(data, len)) > 0) {
+		while ((len = camera_read_captured_data(myCAM, data, len, &mySerial)) > 0) {
 			byte index = 0;
 
 			if (bufferRemaining < len) {
@@ -162,7 +164,7 @@ bool _action_take_photo() {
 				}
 
 				if (photo_size < SEND_BUFFER) {
-					photo_size = (camera_get_photo_size() - sent) * 0.5;
+					photo_size = (camera_get_photo_size(myCAM) - sent) * 0.5;
 					if (photo_size < len) photo_size = len;
 				}
 
@@ -170,7 +172,7 @@ bool _action_take_photo() {
 					mySerial.println(F("max size reached! (a)"));
 					_action_modules_off();
 					delay(3000);
-					_soft_reset();
+//					_soft_reset();
 					return false;
 				}
 
@@ -197,7 +199,7 @@ bool _action_take_photo() {
 					mySerial.println(F("max size reached! (b)"));
 					_action_modules_off();
 					delay(3000);
-					_soft_reset();
+//					_soft_reset();
 					return false;
 				}
 
@@ -205,7 +207,7 @@ bool _action_take_photo() {
 					mySerial.println(F("error publishing! (b)"));
 					return false;
 				}
-				photo_size = (camera_get_photo_size() - sent) * 0.5;
+				photo_size = (camera_get_photo_size(myCAM) - sent) * 0.5;
 				if (photo_size < len) photo_size = len;
 				bufferRemaining = Hologram.mqttInitMessage(CLIENT, messageNr, MSG_TYPE_PHOTO_DATA, packetNr++, photo_size);
 				if (bufferRemaining == -1) {
@@ -256,7 +258,7 @@ bool _action_take_photo() {
 		return false;
 	}
 
-	camera_set_capture_done();
+	camera_set_capture_done(myCAM);
 
 	// give module enough time to send data
 	delay(3000);
@@ -426,7 +428,7 @@ void _input_action() {
 		_action_mqtt_disconnect();
 		break;
 	case ACTION_PHOTO:
-		_action_take_photo();
+//		_action_take_photo();
 		break;
 	case ACTION_SUBSCRIBE:
 		_action_mqtt_subscribe();
@@ -462,6 +464,36 @@ void setup() {
   digitalWrite(LED_PIN, HIGH);
   delay(3000);
   digitalWrite(LED_PIN, LOW);
+
+  /////////////////
+  int a = 0;
+  while (1) {
+	  ArduCAM myCAM(OV2640, 5);
+//	  mySerial.println(F("01"));
+	  digitalWrite(MODULES_SWITCH, HIGH);
+	  mySerial.println(F("init"));
+	  camera_setup(&myCAM, OV2640_640x480, &mySerial);
+	  mySerial.println(F("done"));
+	  if (!_action_take_photo(&myCAM)) {
+		  if (a++ > 4) {
+			  while (1) {
+				  delay(3000);
+			  }
+		  }
+	  }
+//	  mySerial.println(F("05"));
+	  camera_stop();
+	  byte pin[] = {11, 12, 13, 5, A4, A5};
+	  byte pinCount = sizeof(pin) / sizeof(pin[0]);
+	  for (byte i = 0; i < pinCount; i++) {
+		  pinMode(pin[i], OUTPUT);
+		  digitalWrite(pin[i], LOW);
+	  }
+	  digitalWrite(MODULES_SWITCH, LOW);
+//	  mySerial.print(F("Free RAM: ")); mySerial.println(freeRam());
+	  delay(300);
+  }
+  ////////////////
 
   Hologram.debug();
 
@@ -514,12 +546,12 @@ void loop() {
 		if (_action_time_for_photo(n)) {
 			_action_update_voltage();
 			if (_action_startup_and_connect_modules()) {
-				if (_action_send_voltage() && _action_retrieve_config() && _action_take_photo()) {
-					_action_disconnect_and_shutdown_modules();
-				} else {
-					_action_modules_off();
-					_action_retry_later(300); // retry in 5 min
-				}
+//				if (_action_send_voltage() && _action_retrieve_config() && _action_take_photo()) {
+//					_action_disconnect_and_shutdown_modules();
+//				} else {
+//					_action_modules_off();
+//					_action_retry_later(300); // retry in 5 min
+//				}
 			} else {
 				_action_retry_later(300); // retry in 5 min
 				mySerial.println(F("Could not startup/connect SIM. No photo taken."));

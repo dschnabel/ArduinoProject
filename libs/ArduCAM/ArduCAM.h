@@ -567,13 +567,13 @@ struct sensor_reg {
 /****************************************************************/
 /* define a structure for sensor register initialization values */
 /****************************************************************/
-
+#include <SoftwareSerial.h>
 class ArduCAM 
 {
 	public:
 	ArduCAM( void );
 	ArduCAM(byte model ,int CS);
-	void InitCAM( void );
+	void InitCAM( SoftwareSerial *mySerial );
 	
 	void CS_HIGH(void);
 	void CS_LOW(void);
@@ -598,7 +598,7 @@ class ArduCAM
 	uint8_t bus_read(int address);	
  
 	// Write 8 bit values to 8 bit register address
-	int wrSensorRegs8_8(const struct sensor_reg*);
+	int wrSensorRegs8_8(const struct sensor_reg*, SoftwareSerial *mySerial = NULL);
 	
 	// Write 16 bit values to 8 bit register address
 	int wrSensorRegs8_16(const struct sensor_reg*);

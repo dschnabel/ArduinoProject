@@ -214,7 +214,7 @@ ArduCAM::ArduCAM(byte model ,int CS)
 	#endif
 }
 
-void ArduCAM::InitCAM()
+void ArduCAM::InitCAM(SoftwareSerial *mySerial)
 {
  
   switch (sensor_model)
@@ -385,23 +385,32 @@ void ArduCAM::InitCAM()
     case OV2640:
       {
 #if (defined(OV2640_CAM) || defined(OV2640_MINI_2MP) || defined(OV2640_MINI_2MP_PLUS))
-        wrSensorReg8_8(0xff, 0x01);
+//    	  mySerial->println(F("4: 01"));
+    	  wrSensorReg8_8(0xff, 0x01);
+//    	  mySerial->println(F("4: 02"));
         wrSensorReg8_8(0x12, 0x80);
+//        mySerial->println(F("4: 03"));
         delay(100);
         if (m_fmt == JPEG)
         {
-          wrSensorRegs8_8(OV2640_JPEG_INIT);
+        	mySerial->println(F("4: 03b"));
+        	wrSensorRegs8_8(OV2640_JPEG_INIT, mySerial);
+          mySerial->println(F("4: 04"));
           wrSensorRegs8_8(OV2640_YUV422);
           wrSensorRegs8_8(OV2640_JPEG);
+//          mySerial->println(F("4: 05"));
           wrSensorReg8_8(0xff, 0x01);
           wrSensorReg8_8(0x15, 0x00);
+//          mySerial->println(F("4: 06"));
           wrSensorRegs8_8(OV2640_320x240_JPEG);
           //wrSensorReg8_8(0xff, 0x00);
           //wrSensorReg8_8(0x44, 0x32);
         }
         else
         {
-          wrSensorRegs8_8(OV2640_QVGA);
+//        	mySerial->println(F("4: 07"));
+        	wrSensorRegs8_8(OV2640_QVGA);
+//        	mySerial->println(F("4: 08"));
         }
 #endif
         break;
@@ -2934,7 +2943,7 @@ void ArduCAM::set_format(byte fmt)
 
 
 	// Write 8 bit values to 8 bit register address
-int ArduCAM::wrSensorRegs8_8(const struct sensor_reg reglist[])
+int ArduCAM::wrSensorRegs8_8(const struct sensor_reg reglist[], SoftwareSerial *mySerial)
 {
 	#if defined (RASPBERRY_PI)
 		arducam_i2c_write_regs(reglist);
@@ -2943,6 +2952,7 @@ int ArduCAM::wrSensorRegs8_8(const struct sensor_reg reglist[])
 	  uint16_t reg_addr = 0;
 	  uint16_t reg_val = 0;
 	  const struct sensor_reg *next = reglist;
+//	  if (mySerial) mySerial->println("reg 01");
 	  while ((reg_addr != 0xff) | (reg_val != 0xff))
 	  {
 	    reg_addr = pgm_read_word(&next->reg);
@@ -2953,6 +2963,7 @@ int ArduCAM::wrSensorRegs8_8(const struct sensor_reg reglist[])
 		    yield();
 		#endif
 	  }
+//	  if (mySerial) mySerial->println("reg 02");
  #endif  
 	return 1;
 }
