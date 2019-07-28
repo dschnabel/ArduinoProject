@@ -55,21 +55,24 @@
 				  
 				  document.getElementById('loading').style.display = 'none';
 
-				  var container = document.getElementById('visualization');
-				  var items = new vis.DataSet(data);
-				  var options = {type: 'point'};
-				  timeline = new vis.Timeline(container, items, options);	
-				  var now = Date.now();
-				  
+				  var start, end;
 				  var window = document.cookie;
 				  if (window) {
 					windowArray = window.split(';');
-					start = windowArray[0].split('=')[1];
-					end = windowArray[1].split('=')[1];
-					timeline.setWindow(parseInt(start, 10), parseInt(end, 10));
+					startString = windowArray[0].split('=')[1];
+					endString = windowArray[1].split('=')[1];
+					start = parseInt(startString, 10);
+					end = parseInt(endString, 10);
 				  } else {
-					timeline.setWindow(now-100000000, now+100000000);
+					var now = Date.now();
+					start = now - 100000000;
+					end = now + 100000000;
 				  }
+
+				  var container = document.getElementById('visualization');
+				  var items = new vis.DataSet(data);
+				  var options = {type: 'point', start:start, end:end};
+				  timeline = new vis.Timeline(container, items, options);
 				  
 				  timeline.on('click', function (properties) {
 					if (!properties.item && timeline.getSelection().length == 0) {
